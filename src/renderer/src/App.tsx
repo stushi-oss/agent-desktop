@@ -1,31 +1,82 @@
 import { useEffect, useState } from 'react'
 import './i18n'
-import { applyTheme, effectiveTheme, watchSystemTheme } from './theme/theme'
-import { TerminalPane } from './components/TerminalPane'
+import { effectiveTheme, watchSystemTheme } from '@/theme/theme'
+import { useModeStore } from '@/theme/modeStore'
+import { useSessionStore } from '@/stores/sessions'
+import { useTaskStore, selectRunningCount } from '@/stores/tasks'
+import { TitleBar } from '@/components/TitleBar'
+import { SessionSidebar } from '@/components/SessionSidebar'
+import { NewSessionModal } from '@/components/NewSessionModal'
+import { TerminalPane } from '@/components/TerminalPane'
 
 export default function App() {
-  const [theme, setTheme] = useState<'light' | 'dark'>(effectiveTheme('system'))
+  const effective = useModeStore((s) => s.effective)
+  const sessions = useSessionStore((s) => s.sessions)
+  const activeId = useSessionStore((s) => s.activeId)
+  const hydrate = useSessionStore((s) => s.hydrate)
+  const markExited = useSessionStore((s) => s.markExited)
+  const activate = useSessionStore((s) => s.activate)
+  const hydrateTasks = useTaskStore((s) => s.hydrate)
+  const refreshFromPush = useTaskStore((s) => s.refreshFromPush)
+  const tasksRunning = useTaskStore(selectRunningCount)
+  const [newSessionOpen, setNewSessionOpen] = useState(false)
+  // Task 13/17/18 接入抽屉与设置弹窗；先保留开关状态
+  const [tasksOpen, setTasksOpen] = useState(false)
+  const [extOpen, setExtOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+
   useEffect(() => {
-    // 追踪系统主题供 themeMode prop；同步重应用 data-theme（原 App 行为，main.tsx 只做首帧前的一次性应用）
     const off = watchSystemTheme(() => {
-      applyTheme('system')
-      setTheme(effectiveTheme('system'))
+      if (useModeStore.getState().mode === 'system') {
+        useModeStore.setState({ effective: effectiveTheme('system') })
+      }
     })
     return off
   }, [])
-  const [sessionId, setSessionId] = useState<string | null>(null)
+
   useEffect(() => {
-    void window.api.sessions.create('/tmp').then((s) => setSessionId(s.id))
-  }, [])
+    void hydrate()
+    void hydrateTasks()
+    const offExit = window.api.onSessionExit((ev) => markExited(ev.id, ev.code))
+    const offTasks = window.api.onTasksChanged((p) => refreshFromPush(p.tasks, p.history))
+    return () => { offExit(); offTasks() }
+  }, [hydrate, hydrateTasks, markExited, refreshFromPush])
+
+  useEffect(() => {
+    const off = window.api.onShortcut(({ key }) => {
+      if (key === 't') setNewSessionOpen(true)
+      else if (key === 'w') {
+        const id = useSessionStore.getState().activeId
+        if (id) void useSessionStore.getState().close(id)
+      } else {
+        const idx = Number(key) - 1
+        const s = useSessionStore.getState().sessions[idx]
+        if (s) activate(s.id)
+      }
+    })
+    return off
+  }, [activate])
+
   return (
-    <div style={{ height: '100%' }}>
-      {sessionId ? (
-        <TerminalPane
-          session={{ id: sessionId, title: 'tmp', cwd: '', shellCommand: '', createdAt: '', alive: true }}
-          active
-          themeMode={theme}
-        />
-      ) : null}
+    <div className="app-shell">
+      <TitleBar
+        onNewSession={() => setNewSessionOpen(true)}
+        onOpenTasks={() => setTasksOpen((v) => !v)}
+        onOpenExtensions={() => setExtOpen((v) => !v)}
+        onOpenSettings={() => setSettingsOpen(true)}
+        tasksRunning={tasksRunning}
+      />
+      <div className="app-body">
+        <SessionSidebar onNewSession={() => setNewSessionOpen(true)} onOpenTasks={() => setTasksOpen(true)} />
+        <main className="terminal-area">
+          {sessions.map((s) => (
+            <TerminalPane key={s.id} session={s} active={s.id === activeId} themeMode={effective} />
+          ))}
+        </main>
+      </div>
+      {newSessionOpen && <NewSessionModal onClose={() => setNewSessionOpen(false)} />}
+      {/* Task 13/17/18: {tasksOpen && <TaskDrawer/>} {extOpen && <ExtensionsDrawer/>} {settingsOpen && <SettingsModal/>} */}
+      <span hidden>{`${tasksOpen}${extOpen}${settingsOpen}`}</span>
     </div>
   )
 }

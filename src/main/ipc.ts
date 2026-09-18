@@ -60,4 +60,21 @@ export function registerIpc(deps: IpcDeps): void {
   // 广播转发：类级监听器，注册一次覆盖所有会话
   sessions.onData((ev) => push(deps.getWindow(), CHANNELS.sessionData, ev))
   sessions.onExit((ev) => push(deps.getWindow(), CHANNELS.sessionExit, ev))
+
+  // 应用级快捷键：⌘/Ctrl+T 新会话、⌘/Ctrl+W 关会话、⌘/Ctrl+1-9 切换
+  // before-input-event 拦截，避免 macOS 默认菜单把 ⌘W 变成关窗口
+  const SHORTCUT_KEYS = new Set(['t', 'w', '1', '2', '3', '4', '5', '6', '7', '8', '9'])
+  const win = deps.getWindow()
+  if (win && !win.isDestroyed()) {
+    win.webContents.removeAllListeners('before-input-event')
+    win.webContents.on('before-input-event', (event, input) => {
+      if (input.type !== 'keyDown') return
+      if (!(input.meta || input.control) || input.alt || input.shift) return
+      const key = input.key.toLowerCase()
+      if (SHORTCUT_KEYS.has(key)) {
+        event.preventDefault()
+        push(win, 'app:shortcut', { key })
+      }
+    })
+  }
 }

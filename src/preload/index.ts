@@ -40,6 +40,11 @@ const api = {
     const listener = (_e: IpcRendererEvent, payload: { tasks: ScheduledTask[]; history: RunRecord[] }) => cb(payload)
     ipcRenderer.on('tasks:changed', listener)
     return () => ipcRenderer.removeListener('tasks:changed', listener)
+  },
+  onShortcut: (cb: (s: { key: string }) => void): (() => void) => {
+    const listener = (_e: IpcRendererEvent, s: { key: string }) => cb(s)
+    ipcRenderer.on('app:shortcut', listener)
+    return () => ipcRenderer.removeListener('app:shortcut', listener)
   }
 }
 

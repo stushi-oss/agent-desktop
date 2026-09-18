@@ -69,6 +69,9 @@ app.whenReady().then(async () => {
   const schedulerTimer = setInterval(() => taskService.tick(), 30_000)
   schedulerTimer.unref()
 
+  // 先建窗口再注册 IPC：registerIpc 里的快捷键转发依赖 getWindow() 非 null
+  createWindow()
+
   registerIpc({
     getWindow: () => mainWindow,
     sessions,
@@ -76,7 +79,6 @@ app.whenReady().then(async () => {
     shellFor: () => shell
   })
 
-  createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
