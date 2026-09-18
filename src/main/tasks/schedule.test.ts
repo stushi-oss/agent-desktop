@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { nextRunOf, isDue } from './schedule'
 import { isValidCronExpr } from '@shared/scheduleCheck'
+import type { Schedule } from '@shared/types'
 
 const T = (s: string) => new Date(s)
 
@@ -25,6 +26,25 @@ describe('isDue', () => {
   it('到点 → true；未到 → false', () => {
     expect(isDue('2026-01-15T10:00:00', T('2026-01-15T10:00:00'))).toBe(true)
     expect(isDue('2026-01-15T10:00:01', T('2026-01-15T10:00:00'))).toBe(false)
+  })
+})
+
+describe('nextRunOf 边界与兜底（全函数契约）', () => {
+  it('坏 cron 表达式 → null', () => {
+    expect(nextRunOf({ type: 'cron', expr: 'not a cron' }, T('2026-01-15T10:00:00'))).toBeNull()
+  })
+  it('畸形 once.at → null', () => {
+    expect(nextRunOf({ type: 'once', at: 'not-a-date' }, T('2026-01-15T10:00:00'))).toBeNull()
+  })
+  it('minutes <= 0 → null（防 nextRunAt 恒在过去的热循环）', () => {
+    expect(nextRunOf({ type: 'interval', minutes: 0 }, T('2026-01-15T10:00:00'))).toBeNull()
+    expect(nextRunOf({ type: 'interval', minutes: -5 }, T('2026-01-15T10:00:00'))).toBeNull()
+  })
+  it('未知 type → null（旧 schema 运行时兜底）', () => {
+    expect(nextRunOf({ type: 'weekly' } as unknown as Schedule, T('2026-01-15T10:00:00'))).toBeNull()
+  })
+  it('cron currentDate 恰等于触发点 → 明天（next() 严格晚于 currentDate）', () => {
+    expect(nextRunOf({ type: 'cron', expr: '30 8 * * *' }, T('2026-01-15T08:30:00'))).toEqual(T('2026-01-16T08:30:00'))
   })
 })
 
