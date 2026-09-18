@@ -91,4 +91,36 @@ describe('SessionManager', () => {
     const { mgr } = makeManager(false)
     expect(() => mgr.kill('nope')).not.toThrow()
   })
+
+  it('延迟到期前 pty 退出 → 不再写入 claude', () => {
+    const { mgr, created } = makeManager(true)
+    mgr.create('/p', 80, 24, { file: '/bin/zsh', args: ['-l'], label: 'zsh' })
+    created[0].exit(0)
+    vi.advanceTimersByTime(50)
+    expect(created[0].written).toEqual([])
+  })
+
+  it('延迟到期前 kill → 不再写入 claude', () => {
+    const { mgr, created } = makeManager(true)
+    const a = mgr.create('/p', 80, 24, { file: '/bin/zsh', args: ['-l'], label: 'zsh' })
+    mgr.kill(a.id)
+    vi.advanceTimersByTime(50)
+    expect(created[0].written).toEqual([])
+  })
+
+  it('listener 抛异常被隔离，不影响其他 listener 与事件流', () => {
+    const { mgr, created } = makeManager(false)
+    const seen: string[] = []
+    const exits: Array<number | undefined> = []
+    mgr.onData(() => { throw new Error('data listener dead') })
+    mgr.onData((ev) => seen.push(ev.data))
+    mgr.onExit(() => { throw new Error('exit listener dead') })
+    mgr.onExit((ev) => exits.push(ev.code))
+    mgr.create('/a', 80, 24, { file: '/bin/zsh', args: [], label: 'zsh' })
+    expect(() => created[0].emitData('x')).not.toThrow()
+    expect(seen).toEqual(['x'])
+    expect(() => created[0].exit(1)).not.toThrow()
+    expect(exits).toEqual([1])
+    expect(mgr.list()[0].alive).toBe(false)
+  })
 })

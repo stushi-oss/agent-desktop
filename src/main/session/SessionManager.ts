@@ -65,12 +65,24 @@ export class SessionManager {
     this.sessions.set(id, entry)
 
     pty.onData((data) => {
-      for (const cb of this.dataListeners) cb({ id, data })
+      for (const cb of this.dataListeners) {
+        try {
+          cb({ id, data })
+        } catch (err) {
+          console.error('[SessionManager] data listener error', err)
+        }
+      }
     })
     pty.onExit((code) => {
       info.alive = false
       if (entry.claudeTimer) clearTimeout(entry.claudeTimer)
-      for (const cb of this.exitListeners) cb({ id, code })
+      for (const cb of this.exitListeners) {
+        try {
+          cb({ id, code })
+        } catch (err) {
+          console.error('[SessionManager] exit listener error', err)
+        }
+      }
     })
 
     if (this.defaults.launchClaude) {
@@ -79,7 +91,7 @@ export class SessionManager {
         this.defaults.claudeLaunchDelayMs ?? 600
       )
     }
-    return info
+    return { ...info }
   }
 
   write(id: string, data: string): void {
