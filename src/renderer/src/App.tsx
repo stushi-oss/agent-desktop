@@ -4,7 +4,7 @@ import { applyTheme, watchSystemTheme } from './theme/theme'
 
 export default function App() {
   useEffect(() => {
-    applyTheme('system')
+    // 初始主题已在 main.tsx 渲染前同步应用，这里只订阅系统主题变化
     return watchSystemTheme(() => applyTheme('system'))
   }, [])
   return (
