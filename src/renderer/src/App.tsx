@@ -8,6 +8,7 @@ import { TitleBar } from '@/components/TitleBar'
 import { SessionSidebar } from '@/components/SessionSidebar'
 import { NewSessionModal } from '@/components/NewSessionModal'
 import { TerminalPane } from '@/components/TerminalPane'
+import { TaskDrawer } from '@/components/tasks/TaskDrawer'
 
 export default function App() {
   const effective = useModeStore((s) => s.effective)
@@ -20,7 +21,7 @@ export default function App() {
   const refreshFromPush = useTaskStore((s) => s.refreshFromPush)
   const tasksRunning = useTaskStore(selectRunningCount)
   const [newSessionOpen, setNewSessionOpen] = useState(false)
-  // Task 13/17/18 接入抽屉与设置弹窗；先保留开关状态
+  // Task 17/18 接入扩展抽屉与设置弹窗；先保留开关状态
   const [tasksOpen, setTasksOpen] = useState(false)
   const [extOpen, setExtOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -75,8 +76,9 @@ export default function App() {
         </main>
       </div>
       {newSessionOpen && <NewSessionModal onClose={() => setNewSessionOpen(false)} />}
-      {/* Task 13/17/18: {tasksOpen && <TaskDrawer/>} {extOpen && <ExtensionsDrawer/>} {settingsOpen && <SettingsModal/>} */}
-      <span hidden>{`${tasksOpen}${extOpen}${settingsOpen}`}</span>
+      {tasksOpen && <TaskDrawer onClose={() => setTasksOpen(false)} />}
+      {/* Task 17/18: {extOpen && <ExtensionsDrawer/>} {settingsOpen && <SettingsModal/>} */}
+      <span hidden>{`${extOpen}${settingsOpen}`}</span>
     </div>
   )
 }
