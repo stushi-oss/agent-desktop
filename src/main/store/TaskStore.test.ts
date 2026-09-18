@@ -67,6 +67,18 @@ describe('TaskStore', () => {
     expect(st.tasks).toEqual([])
     expect(readdirSync(dir).some((f) => f.startsWith('tasks.json.corrupt-'))).toBe(true)
   })
+  it('形状错误的 tasks.json（合法 JSON 非数组）被备份并返回空', () => {
+    writeFileSync(join(dir, 'tasks.json'), '{"tasks": []}', 'utf8')
+    const st = loadStore(dir)
+    expect(st.tasks).toEqual([])
+    expect(readdirSync(dir).some((f) => f.startsWith('tasks.json.corrupt-'))).toBe(true)
+  })
+  it('形状错误的 history.json（合法 JSON 非数组）被备份并返回空', () => {
+    writeFileSync(join(dir, 'history.json'), '{"history": []}', 'utf8')
+    const st = loadStore(dir)
+    expect(st.history).toEqual([])
+    expect(readdirSync(dir).some((f) => f.startsWith('history.json.corrupt-'))).toBe(true)
+  })
   it('trimHistory 保留最新 HISTORY_CAP 条（按 startedAt 倒序）', () => {
     const many: RunRecord[] = Array.from({ length: HISTORY_CAP + 30 }, (_, i) =>
       run(`r${i}`, new Date(Date.UTC(2026, 0, 1, 0, i)).toISOString())

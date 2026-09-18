@@ -11,19 +11,18 @@ export interface StoreData {
 export const HISTORY_CAP = 200
 
 export function loadStore(storeDir: string): StoreData {
-  const tasksR = readJson<ScheduledTask[]>(join(storeDir, 'tasks.json'))
-  if (!tasksR.ok && tasksR.reason === 'corrupt') {
-    const bak = backupCorrupt(join(storeDir, 'tasks.json'))
-    console.warn(`[store] tasks.json corrupted, backed up to ${bak}`)
-  }
-  const historyR = readJson<RunRecord[]>(join(storeDir, 'history.json'))
-  if (!historyR.ok && historyR.reason === 'corrupt') {
-    const bak = backupCorrupt(join(storeDir, 'history.json'))
-    console.warn(`[store] history.json corrupted, backed up to ${bak}`)
+  // 损坏或形状错误（合法 JSON 非数组）均备份后返回空，避免下次保存覆盖原始数据
+  const loadArray = <T>(file: string): T[] => {
+    const r = readJson<T[]>(join(storeDir, file))
+    if (r.ok && Array.isArray(r.data)) return r.data
+    if (!r.ok && r.reason === 'missing') return []
+    const bak = backupCorrupt(join(storeDir, file))
+    console.warn(`[store] ${file} corrupted or invalid shape, backed up to ${bak}`)
+    return []
   }
   return {
-    tasks: tasksR.ok && Array.isArray(tasksR.data) ? tasksR.data : [],
-    history: historyR.ok && Array.isArray(historyR.data) ? trimHistory(historyR.data) : []
+    tasks: loadArray<ScheduledTask>('tasks.json'),
+    history: trimHistory(loadArray<RunRecord>('history.json'))
   }
 }
 
