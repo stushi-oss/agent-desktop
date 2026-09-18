@@ -84,3 +84,11 @@ input, textarea, select { font: inherit; }
 .scroll-y { overflow-y: auto; }
 .scroll-y::-webkit-scrollbar { width: 8px; }
 .scroll-y::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
+
+/* ===== 终端 ===== */
+.terminal-host {
+  height: 100%;
+  background: var(--terminal-bg);
+  padding: 6px 4px 0 10px;
+}
+.terminal-host.is-hidden { display: none; }
