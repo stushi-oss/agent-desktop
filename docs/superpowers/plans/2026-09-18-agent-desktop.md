@@ -862,12 +862,14 @@ Expected: FAIL — `Cannot find module './env'`。
 
 - [ ] **Step 3.2: 实现 env.ts**
 
-`src/main/env.ts`：
+`src/main/env.ts`（注意：路径拼接用 `pathFor(platform)` 从 `node:path` 选 win32/posix——
+宿主 join 在 macOS 上会把 win32 用例拼出混合分隔符导致测试必挂）：
 
 ```ts
 import { execFile } from 'node:child_process'
-import { existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, posix, win32 } from 'node:path'
+
+const pathFor = (platform: NodeJS.Platform) => (platform === 'win32' ? win32 : posix)
 
 /** GUI 进程环境探测：macOS 需要登录 shell 的 PATH；其他平台直接用 process.env */
 export function buildProbeCommand(
@@ -928,6 +930,7 @@ export function resolveClaudePath(
   platform: NodeJS.Platform,
   exists: (p: string) => boolean = existsSync
 ): string | null {
+  const join = pathFor(platform)
   const home = env.HOME ?? env.USERPROFILE
   if (!home) return null
   const exe = platform === 'win32' ? 'claude.exe' : 'claude'
@@ -941,6 +944,7 @@ export function resolveClaudePath(
 
 /** 供设置页展示的探测候选（去重） */
 export function claudeCandidates(env: NodeJS.ProcessEnv, platform: NodeJS.Platform): string[] {
+  const join = pathFor(platform)
   const home = env.HOME ?? env.USERPROFILE
   const exe = platform === 'win32' ? 'claude.exe' : 'claude'
   const sep = platform === 'win32' ? ';' : ':'
@@ -954,7 +958,7 @@ export function claudeCandidates(env: NodeJS.ProcessEnv, platform: NodeJS.Platfo
 - [ ] **Step 3.3: 运行测试确认通过**
 
 Run: `npx vitest run src/main/env.test.ts`
-Expected: 6 passed。
+Expected: 7 passed。
 
 - [ ] **Step 3.4: Commit**
 
