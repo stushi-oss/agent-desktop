@@ -1,2 +1,86 @@
 html, body, #root { height: 100%; margin: 0; }
-body { background: #161b22; color: #adbac7; font-family: -apple-system, 'Segoe UI', sans-serif; }
+
+/* ===== 设计令牌：专业双主题（GitHub Light / Dark Dimmed 质感） ===== */
+:root, :root[data-theme='dark'] {
+  --bg: #161b22;            /* 应用背景 / 面板 */
+  --bg-sidebar: #12161d;    /* 侧栏 */
+  --bg-raised: #1c2129;     /* 弹层/抽屉 */
+  --terminal-bg: #0d1117;   /* 终端底色（常驻深色，不随主题反转） */
+  --border: #30363d;
+  --border-strong: #444c56;
+  --text: #adbac7;
+  --text-strong: #e6edf3;
+  --text-dim: #768390;
+  --accent: #f78166;
+  --accent-contrast: #1b1f24;
+  --accent-soft: rgba(247, 129, 102, 0.15);
+  --success: #57ab5a;
+  --danger: #f85149;
+  --warn: #e3b341;
+  --shadow: 0 8px 24px rgba(1, 4, 9, 0.6);
+}
+:root[data-theme='light'] {
+  --bg: #ffffff;
+  --bg-sidebar: #f8f9fb;
+  --bg-raised: #ffffff;
+  --terminal-bg: #0d1117;
+  --border: #d8dce4;
+  --border-strong: #b8bfcc;
+  --text: #4b5563;
+  --text-strong: #1f2328;
+  --text-dim: #6e7781;
+  --accent: #316dca;
+  --accent-contrast: #ffffff;
+  --accent-soft: rgba(49, 109, 202, 0.12);
+  --success: #1a7f37;
+  --danger: #cf222e;
+  --warn: #9a6700;
+  --shadow: 0 8px 24px rgba(140, 149, 159, 0.2);
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-size: 13px;
+  overflow: hidden;
+  user-select: none;
+}
+* { box-sizing: border-box; }
+button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+input, textarea, select { font: inherit; }
+
+/* ===== 通用控件 ===== */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 12px; border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg); color: var(--text);
+}
+.btn:hover { border-color: var(--accent); color: var(--text-strong); }
+.btn-primary { background: var(--accent); color: var(--accent-contrast); border-color: var(--accent); }
+.btn-primary:hover { opacity: 0.9; }
+.btn-danger:hover { border-color: var(--danger); color: var(--danger); }
+.btn-ghost { border-color: transparent; color: var(--text-dim); }
+.btn-ghost:hover { color: var(--text-strong); background: var(--accent-soft); }
+
+.field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.field label { font-size: 12px; color: var(--text-dim); }
+.field input, .field textarea, .field select {
+  background: var(--bg-sidebar); color: var(--text-strong);
+  border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px;
+}
+.field input:focus, .field textarea:focus, .field select:focus {
+  outline: none; border-color: var(--accent);
+}
+.field .error { color: var(--danger); font-size: 12px; }
+
+.badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px;
+  background: var(--accent); color: var(--accent-contrast); font-size: 10px; font-weight: 600;
+}
+
+.scroll-y { overflow-y: auto; }
+.scroll-y::-webkit-scrollbar { width: 8px; }
+.scroll-y::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
