@@ -22,6 +22,7 @@ describe('parseStreamLine', () => {
     expect(parseStreamLine('[1,2]')).toBeNull()
     expect(parseStreamLine('42')).toBeNull()
     expect(parseStreamLine('{"foo":1}')).toBeNull()
+    expect(parseStreamLine('{"type":42}')).toBeNull()
   })
 })
 
@@ -36,6 +37,20 @@ describe('extractResultText', () => {
   })
   it('两者皆无 → undefined', () => {
     expect(extractResultText([parseStreamLine(LINES[0])!])).toBeUndefined()
+  })
+  it('assistant 文本与 result.result 同时存在 → 优先 assistant（可区分）', () => {
+    const events = [
+      parseStreamLine('{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"FROM_ASSISTANT"}]}}')!,
+      parseStreamLine('{"type":"result","subtype":"success","result":"FROM_RESULT","is_error":false}')!
+    ]
+    expect(extractResultText(events)).toBe('FROM_ASSISTANT')
+  })
+  it('仅含 tool_use 的 assistant 不清除已记录文本', () => {
+    const events = [
+      parseStreamLine('{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"A"}]}}')!,
+      parseStreamLine('{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t2","name":"Bash","input":{}}]}}')!
+    ]
+    expect(extractResultText(events)).toBe('A')
   })
 })
 
@@ -54,5 +69,10 @@ describe('toTranscriptItems', () => {
   it('result is_error=true 标记错误', () => {
     const ev = parseStreamLine('{"type":"result","subtype":"error_during_execution","result":"boom","is_error":true}')!
     expect(toTranscriptItems([ev])[0]).toMatchObject({ kind: 'result', isError: true })
+  })
+  it('content 含 null/非对象元素 → 跳过且不抛错', () => {
+    const ev = parseStreamLine('{"type":"assistant","message":{"role":"assistant","content":[null,{"type":"text","text":"ok"}]}}')!
+    const items = toTranscriptItems([ev])
+    expect(items).toEqual([{ kind: 'text', text: 'ok' }])
   })
 })

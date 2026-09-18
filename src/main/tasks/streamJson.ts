@@ -5,7 +5,7 @@ export function parseStreamLine(line: string): StreamEvent | null {
   if (!trimmed) return null
   try {
     const value: unknown = JSON.parse(trimmed)
-    if (typeof value === 'object' && value !== null && 'type' in value) {
+    if (typeof value === 'object' && value !== null && typeof (value as { type?: unknown }).type === 'string') {
       return value as StreamEvent
     }
     return null
@@ -46,6 +46,7 @@ export function toTranscriptItems(events: StreamEvent[]): TranscriptItem[] {
       const content = (ev as { message?: { content?: unknown[] } }).message?.content
       if (Array.isArray(content)) {
         for (const c of content) {
+          if (typeof c !== 'object' || c === null) continue
           const block = c as { type?: string; text?: unknown; name?: unknown; input?: unknown }
           if (block.type === 'text' && typeof block.text === 'string') {
             items.push({ kind: 'text', text: block.text })
