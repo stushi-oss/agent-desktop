@@ -1842,7 +1842,7 @@ export {}
     if (!win || win.isDestroyed()) return
     win.webContents.on('before-input-event', (event, input) => {
       if (input.type !== 'keyDown') return
-      if (!(input.meta || input.control) || input.altKey || input.shiftKey) return
+      if (!(input.meta || input.control) || input.alt || input.shift) return  // Electron Input 用 alt/shift
       const key = input.key.toLowerCase()
       if (SHORTCUT_KEYS.has(key)) {
         event.preventDefault()
