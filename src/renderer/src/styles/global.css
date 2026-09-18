@@ -232,3 +232,28 @@ input, textarea, select { font: inherit; }
   background: var(--accent-soft); border: 1px solid var(--warn);
   color: var(--text); border-radius: 6px; padding: 8px 10px; font-size: 12px; margin-bottom: 12px;
 }
+
+/* ===== 运行历史时间线 ===== */
+.run-item {
+  border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px;
+  display: flex; flex-direction: column; gap: 4px; background: var(--bg);
+}
+.run-item .row1 { display: flex; align-items: center; gap: 8px; }
+.run-item .when { color: var(--text-dim); font-size: 11.5px; }
+.run-item .result {
+  color: var(--text); font-size: 12px; max-height: 40px; overflow: hidden;
+  white-space: pre-wrap; word-break: break-all;
+}
+.run-item .link { color: var(--accent); font-size: 12px; align-self: flex-start; padding: 0; }
+.run-item .link:hover { text-decoration: underline; }
+
+/* ===== 回放对话流 ===== */
+.transcript { display: flex; flex-direction: column; gap: 10px; }
+.tr-bubble { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--bg-sidebar); }
+.tr-bubble.text { white-space: pre-wrap; word-break: break-word; color: var(--text-strong); font-size: 12.5px; }
+.tr-tool { display: flex; align-items: center; gap: 6px; color: var(--accent); font-size: 12px; }
+.tr-tool .input { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; font-family: monospace; }
+.tr-result { border-color: var(--success); }
+.tr-result.is-error { border-color: var(--danger); }
+.tr-result .head { font-size: 11px; color: var(--text-dim); margin-bottom: 4px; }
+.tr-result .body { white-space: pre-wrap; word-break: break-word; color: var(--text-strong); font-size: 12.5px; }

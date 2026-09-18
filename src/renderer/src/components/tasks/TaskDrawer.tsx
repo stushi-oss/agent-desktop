@@ -5,6 +5,7 @@ import { useTaskStore } from '@/stores/tasks'
 import { formatRelative } from '@/lib/format'
 import { Toggle } from '@/components/ui/Toggle'
 import { TaskForm } from './TaskForm'
+import { RunHistory } from './RunHistory'
 
 type View =
   | { kind: 'list' }
@@ -140,7 +141,7 @@ function TaskDetail({ taskId, onEdit, onRunNow, onDelete }: {
         <button className="btn btn-danger" style={{ marginLeft: 'auto' }} onClick={onDelete}>{t('common.delete')}</button>
       </div>
       <h3 style={{ fontSize: 13, color: 'var(--text-strong)' }}>{t('tasks.history')}</h3>
-      {/* Task 14: <RunHistory taskId={task.id} /> */}
+      <RunHistory taskId={task.id} />
     </div>
   )
 }
