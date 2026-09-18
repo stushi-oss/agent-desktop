@@ -38,6 +38,8 @@ export function startRun(task: ScheduledTask, ctx: RunContext, opts: RunOpts = {
   mkdirSync(dir, { recursive: true })
   const transcriptPath = join(dir, `${runId}.jsonl`)
   const out = createWriteStream(transcriptPath, { encoding: 'utf8', flags: 'w' })
+  // 写失败（ENOSPC/EACCES/runsDir 被删）不能让流抛未捕获异常崩掉整个应用
+  out.on('error', (err) => console.error('[runner] transcript write failed', err))
   let buffer = ''
 
   const args = [
@@ -49,7 +51,11 @@ export function startRun(task: ScheduledTask, ctx: RunContext, opts: RunOpts = {
   if (task.model) args.push('--model', task.model)
 
   const child: ChildProcess = spawnFn(ctx.claudePath, args, { cwd: task.cwd, env: ctx.env })
-  const timeoutMs = opts.timeoutMs ?? Math.max(1, task.timeoutMinutes) * 60_000
+  // Number.isFinite 同时挡掉 undefined 与 NaN（NaN 的 setTimeout 会立即触发）
+  const timeoutMs =
+    opts.timeoutMs !== undefined && Number.isFinite(opts.timeoutMs)
+      ? opts.timeoutMs
+      : Math.max(1, task.timeoutMinutes) * 60_000
 
   const promise = new Promise<RunRecord>((resolve) => {
     const settle = (record: RunRecord): void => {
@@ -82,6 +88,12 @@ export function startRun(task: ScheduledTask, ctx: RunContext, opts: RunOpts = {
     })
 
     child.on('close', (code) => {
+      // flush 未换行结尾的末行，否则 transcript 有它但 extractResultText 拿不到
+      if (buffer.trim()) {
+        const ev = parseStreamLine(buffer)
+        if (ev) events.push(ev)
+        buffer = ''
+      }
       settle({
         id: runId, taskId: task.id, startedAt, finishedAt: new Date().toISOString(),
         status: code === 0 ? 'success' : 'failed',
@@ -96,11 +108,17 @@ export function startRun(task: ScheduledTask, ctx: RunContext, opts: RunOpts = {
       timedOut = true
       child.kill('SIGTERM')
       setTimeout(() => {
-        if (!finished && child.exitCode === null) child.kill('SIGKILL')
+        if (!finished && child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
       }, 3000).unref()
     }, timeoutMs)
     timer.unref()
   })
 
-  return { runId, promise, kill: () => child.kill('SIGTERM') }
+  return {
+    runId,
+    promise,
+    kill: () => {
+      if (!finished && child.exitCode === null && child.signalCode === null) child.kill('SIGTERM')
+    }
+  }
 }

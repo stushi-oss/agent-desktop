@@ -38,6 +38,14 @@ describe('TaskRunner（真实 spawn 假 CLI）', () => {
     expect(JSON.parse(lines[0]).type).toBe('system')
   })
 
+  it('末行无换行：close 时 flush buffer，resultText 仍提取到', async () => {
+    const { ctx } = makeCtx({ NO_NL: '1' })
+    const rec = await startRun(task(), ctx).promise
+    expect(rec.status).toBe('success')
+    // 'tail answer' 只可能来自 flush 的末行——不存在可回退的 assistant 行
+    expect(rec.resultText).toBe('tail answer')
+  })
+
   it('失败：EXIT_CODE=1 → status=failed', async () => {
     const { ctx } = makeCtx({ EXIT_CODE: '1' })
     const rec = await startRun(task(), ctx).promise
