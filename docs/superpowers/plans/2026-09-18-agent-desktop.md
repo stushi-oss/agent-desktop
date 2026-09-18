@@ -1319,7 +1319,8 @@ export const nodePtyFactory: PtyFactory = (opts) => {
     resize: (cols, rows) => pty.resize(cols, rows),
     kill: (signal) => pty.kill(signal),
     onData: (cb) => pty.onData(cb),
-    onExit: (cb) => pty.onExit(cb)
+    // node-pty 1.1.0 的 onExit 回调参数是 { exitCode, signal }，不是裸 number
+    onExit: (cb) => pty.onExit(({ exitCode }) => cb(exitCode))
   }
 }
 ```
