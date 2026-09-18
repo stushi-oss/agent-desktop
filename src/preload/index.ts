@@ -45,6 +45,11 @@ const api = {
     const listener = (_e: IpcRendererEvent, s: { key: string }) => cb(s)
     ipcRenderer.on('app:shortcut', listener)
     return () => ipcRenderer.removeListener('app:shortcut', listener)
+  },
+  onOpenTasks: (cb: () => void): (() => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('app:openTasks', listener)
+    return () => ipcRenderer.removeListener('app:openTasks', listener)
   }
 }
 

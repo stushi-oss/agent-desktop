@@ -58,6 +58,12 @@ export default function App() {
     return off
   }, [activate])
 
+  // 系统通知点击 → 打开任务抽屉
+  useEffect(() => {
+    const off = window.api.onOpenTasks(() => setTasksOpen(true))
+    return off
+  }, [])
+
   return (
     <div className="app-shell">
       <TitleBar

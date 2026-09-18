@@ -7,6 +7,8 @@ import { nodePtyFactory } from './ptyFactory'
 import { SessionManager } from './session/SessionManager'
 import { TaskService } from './tasks/TaskService'
 import { registerIpc, hookAppShortcuts } from './ipc'
+import { initNotifications, showNotification, setDockBadge } from './notifications'
+import { notifyTexts } from './notifyText'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -54,6 +56,8 @@ app.whenReady().then(async () => {
   mkdirSync(storeDir, { recursive: true })
   mkdirSync(runsDir, { recursive: true })
 
+  initNotifications()
+
   const taskService = new TaskService({
     storeDir,
     runsDir,
@@ -64,8 +68,23 @@ app.whenReady().then(async () => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('tasks:changed', { tasks, history })
       }
+      setDockBadge(history.filter((r) => r.status === 'running').length)
+    },
+    notify: (rec, task) => {
+      const texts = notifyTexts(app.getLocale())
+      const failed = rec.status === 'failed'
+      if (failed && !task.notify.onFailure) return
+      if (!failed && rec.status !== 'success') return
+      if (!failed && !task.notify.onComplete) return
+      showNotification(failed ? texts.failed(task.name) : texts.done(task.name), texts.detail, () => {
+        if (mainWindow) {
+          if (mainWindow.isMinimized()) mainWindow.restore()
+          mainWindow.show()
+          mainWindow.focus()
+          mainWindow.webContents.send('app:openTasks')
+        }
+      })
     }
-    // notify 在 Task 15 接入系统通知
   })
   taskService.load()
   const schedulerTimer = setInterval(() => taskService.tick(), 30_000)
