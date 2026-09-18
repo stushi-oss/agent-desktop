@@ -11,7 +11,7 @@
     "skipLibCheck": true,
     "noEmit": true,
     "outDir": "out/tsconfig.web.tsbuildinfo",
-    "paths": { "@shared/*": ["./src/shared/*"], "@/*": ["./src/renderer/src/*"] }
+    "paths": { "@shared/*": ["./src/shared/*"], "@main/*": ["./src/main/*"], "@/*": ["./src/renderer/src/*"] }
   },
   "include": ["src/renderer/src/**/*", "src/shared/**/*"]
 }
