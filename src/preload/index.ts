@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
-import type { SessionSummary } from '@shared/types'
+import type { RunRecord, ScheduledTask, SessionSummary, TaskInput, TranscriptItem } from '@shared/types'
 
 const api = {
   sessions: {
@@ -24,6 +24,22 @@ const api = {
   app: {
     pickDirectory: (): Promise<string | null> => ipcRenderer.invoke('app:pickDirectory'),
     platform: process.platform
+  },
+  tasks: {
+    list: (): Promise<ScheduledTask[]> => ipcRenderer.invoke('tasks:list'),
+    history: (taskId?: string): Promise<RunRecord[]> => ipcRenderer.invoke('tasks:history', taskId),
+    create: (input: TaskInput): Promise<ScheduledTask> => ipcRenderer.invoke('tasks:create', input),
+    update: (id: string, patch: Partial<TaskInput> & { enabled?: boolean }): Promise<ScheduledTask | undefined> =>
+      ipcRenderer.invoke('tasks:update', id, patch),
+    remove: (id: string): Promise<boolean> => ipcRenderer.invoke('tasks:remove', id),
+    setEnabled: (id: string, enabled: boolean): Promise<void> => ipcRenderer.invoke('tasks:setEnabled', id, enabled),
+    runNow: (id: string): Promise<void> => ipcRenderer.invoke('tasks:runNow', id),
+    transcript: (rec: RunRecord): Promise<TranscriptItem[]> => ipcRenderer.invoke('tasks:transcript', rec)
+  },
+  onTasksChanged: (cb: (payload: { tasks: ScheduledTask[]; history: RunRecord[] }) => void): (() => void) => {
+    const listener = (_e: IpcRendererEvent, payload: { tasks: ScheduledTask[]; history: RunRecord[] }) => cb(payload)
+    ipcRenderer.on('tasks:changed', listener)
+    return () => ipcRenderer.removeListener('tasks:changed', listener)
   }
 }
 
