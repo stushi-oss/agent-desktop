@@ -30,9 +30,9 @@ export function TerminalPane({ session, active, themeMode }: Props) {
     const fit = new FitAddon()
     term.loadAddon(fit)
     term.open(hostRef.current!)
-    // 放行应用级快捷键（⌘/Ctrl+T、W、1-9）到应用层
+    // 放行应用级快捷键（⌘/Ctrl+T、W、1-9；不含 alt/shift 组合）到应用层
     term.attachCustomKeyEventHandler((ev) => {
-      if ((ev.metaKey || ev.ctrlKey) && ev.type === 'keydown') {
+      if ((ev.metaKey || ev.ctrlKey) && !ev.altKey && !ev.shiftKey && ev.type === 'keydown') {
         const k = ev.key.toLowerCase()
         if (k === 't' || k === 'w' || (k >= '1' && k <= '9')) return false
       }
