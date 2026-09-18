@@ -606,7 +606,10 @@ export const zhCN = {
   }
 } as const
 
-export type TranslationShape = typeof zhCN
+// Widen：as const 会把值收窄为中文字面量类型，直接 typeof 会让 en.ts 报 ~90 个
+// TS2322；Widen 保持 key/结构完全校验、仅把值放宽为 string。
+type Widen<T> = { [K in keyof T]: T[K] extends string ? string : Widen<T[K]> }
+export type TranslationShape = Widen<typeof zhCN>
 ```
 
 `src/renderer/src/i18n/en.ts`（与 zh-CN 结构完全一致）：
