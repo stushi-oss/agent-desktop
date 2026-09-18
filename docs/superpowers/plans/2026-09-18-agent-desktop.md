@@ -2751,7 +2751,7 @@ export function toTranscriptItems(events: StreamEvent[]): TranscriptItem[] {
 - [ ] **Step 10.3: 运行测试确认通过**
 
 Run: `npx vitest run src/main/tasks/streamJson.test.ts`
-Expected: 10 passed。
+Expected: 7 passed。
 
 - [ ] **Step 10.4: Commit**
 
