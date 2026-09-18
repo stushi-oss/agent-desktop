@@ -2849,7 +2849,7 @@ describe('TaskRunner（真实 spawn 假 CLI）', () => {
   })
 
   it('spawn 失败（不存在的 claudePath）→ failed + error', async () => {
-    const { ctx } = ctx()
+    const { ctx } = makeCtx()
     const rec = await startRun(task(), { ...ctx, claudePath: '/nonexistent/claude' }, {}).promise
     expect(rec.status).toBe('failed')
     expect(rec.error).toBeTruthy()
