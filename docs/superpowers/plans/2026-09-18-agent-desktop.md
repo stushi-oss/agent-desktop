@@ -2872,7 +2872,7 @@ export default defineConfig({
 })
 ```
 
-`tsconfig.node.json` / `tsconfig.web.json` 的 `paths` 各增加 `"@main/*": ["./src/main/*"]`。
+`tsconfig.node.json` / `tsconfig.web.json` 的 `paths` 各增加 `"@main/*": ["./src/main/*"]`；**同时** `tsconfig.node.json` 的 `include` 增加 `"tests/**/*"`（否则 tests/ 下的集成测试从不被 typecheck——T1 质量评审发现的计划缺口）。
 
 Run: `npx vitest run tests/integration/taskRunner.test.ts`
 Expected: FAIL — `Cannot find module '@main/tasks/TaskRunner'`。
