@@ -3259,7 +3259,7 @@ export class TaskService {
           status: 'missed'
         })
       }
-      t.nextRunAt = t.enabled ? this.nextOf(t, now)?.toISOString() : undefined
+      t.nextRunAt = t.enabled ? this.nextOf(t, now) : undefined  // nextOf 已返回 ISO 字符串
     }
     this.history = trimHistory(this.history)
     this.persist()
@@ -3296,20 +3296,14 @@ export class TaskService {
   }
 
   private fire(t: ScheduledTask, now: Date): void {
-    const running: RunRecord = {
-      id: newId(),
-      taskId: t.id,
-      startedAt: now.toISOString(),
-      status: 'running'
-    }
-    this.history = trimHistory([running, ...this.history])
-    saveHistory(this.deps.storeDir, this.history)
-    this.emit()
-
-    t.nextRunAt = this.nextOf(t, now)
-
+    // 先拿 runner handle，让记录 id 对齐 runId（与 transcript 文件名 ${runId}.jsonl 一致）
     if (!this.deps.claudePath) {
-      this.finishRun(t, running, {
+      const failed: RunRecord = {
+        id: newId(), taskId: t.id, startedAt: now.toISOString(), status: 'running'
+      }
+      this.history = trimHistory([failed, ...this.history])
+      t.nextRunAt = this.nextOf(t, now)
+      this.finishRun(t, failed, {
         status: 'failed',
         error: 'claude executable not found',
         finishedAt: new Date().toISOString()
@@ -3322,6 +3316,17 @@ export class TaskService {
       runsDir: this.deps.runsDir
     }
     const handle = this.runner(t, ctx)
+    const running: RunRecord = {
+      id: handle.runId,
+      taskId: t.id,
+      startedAt: now.toISOString(),
+      status: 'running'
+    }
+    this.history = trimHistory([running, ...this.history])
+    saveHistory(this.deps.storeDir, this.history)
+    this.emit()
+
+    t.nextRunAt = this.nextOf(t, now)
     this.active.set(t.id, handle)
     void handle.promise.then((final) => {
       this.active.delete(t.id)
