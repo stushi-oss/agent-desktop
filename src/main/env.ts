@@ -37,11 +37,15 @@ export function probeUserEnv(
   const cmd = buildProbeCommand(platform, shell)
   if (!cmd) return Promise.resolve(null)
   return new Promise((resolve) => {
+    // 兜底竞速：execFile 的 timeout 只 SIGTERM shell 本身，'close' 还要等 stdout 管道关闭——
+    // 若 rc 文件 spawn 了继承 stdout 的守护进程（ssh-agent 等），回调永不触发，到点强制 resolve
+    const timer = setTimeout(() => resolve(null), timeoutMs + 1000)
     const child = execFile(
       cmd.file,
       cmd.args,
       { timeout: timeoutMs, env: { TERM: 'dumb' } as NodeJS.ProcessEnv, windowsHide: true },
       (err, stdout) => {
+        clearTimeout(timer)
         if (err && !stdout) {
           console.warn('[env] probe failed:', err instanceof Error ? err.message : err)
           resolve(null)
@@ -51,7 +55,10 @@ export function probeUserEnv(
         resolve(Object.keys(probed).length > 0 ? probed : null)
       }
     )
-    child.on('error', () => resolve(null))
+    child.on('error', () => {
+      clearTimeout(timer)
+      resolve(null)
+    })
   })
 }
 

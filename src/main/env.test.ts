@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildProbeCommand, parseEnvOutput, resolveClaudePath } from './env'
+import { buildProbeCommand, claudeCandidates, mergedEnv, parseEnvOutput, resolveClaudePath } from './env'
 
 describe('buildProbeCommand', () => {
   it('darwin 返回登录 shell -l -i -c env', () => {
@@ -50,5 +50,39 @@ describe('resolveClaudePath', () => {
   })
   it('找不到返回 null', () => {
     expect(resolveClaudePath({ HOME: '/Users/u', PATH: '/usr/bin' }, 'darwin', () => false)).toBeNull()
+  })
+})
+
+describe('mergedEnv', () => {
+  it('probed 为 null 时返回 base 的副本', () => {
+    const base = { PATH: '/usr/bin', HOME: '/Users/u' }
+    const merged = mergedEnv(base, null)
+    expect(merged).toEqual(base)
+    expect(merged).not.toBe(base)
+  })
+  it('probed 有 PATH 时 probed 优先覆盖，PATH 取 probed.PATH', () => {
+    const merged = mergedEnv(
+      { PATH: '/usr/bin', HOME: '/Users/u' },
+      { PATH: '/opt/homebrew/bin', FOO: 'bar' }
+    )
+    expect(merged.PATH).toBe('/opt/homebrew/bin')
+    expect(merged.FOO).toBe('bar')
+    expect(merged.HOME).toBe('/Users/u')
+  })
+  it('probed 无 PATH 时回退 base.PATH', () => {
+    const merged = mergedEnv({ PATH: '/usr/bin', HOME: '/Users/u' }, { FOO: 'bar' })
+    expect(merged.PATH).toBe('/usr/bin')
+    expect(merged.FOO).toBe('bar')
+  })
+})
+
+describe('claudeCandidates', () => {
+  it('home 候选排首位，PATH 目录依序跟随', () => {
+    const list = claudeCandidates({ HOME: '/Users/u', PATH: '/usr/bin:/opt/homebrew/bin' }, 'darwin')
+    expect(list).toEqual(['/Users/u/.local/bin/claude', '/usr/bin/claude', '/opt/homebrew/bin/claude'])
+  })
+  it('PATH 重复目录及与 home 重复的候选去重', () => {
+    const list = claudeCandidates({ HOME: '/Users/u', PATH: '/Users/u/.local/bin:/usr/bin:/usr/bin' }, 'darwin')
+    expect(list).toEqual(['/Users/u/.local/bin/claude', '/usr/bin/claude'])
   })
 })
