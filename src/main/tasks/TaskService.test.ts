@@ -57,6 +57,10 @@ describe('TaskService.create/update/remove', () => {
     expect(() => svc.create(input({ schedule: { type: 'interval', minutes: 0 } }), now)).toThrow()
     expect(() => svc.create(input({ schedule: { type: 'once', at: '2026-01-15T09:00:00' } }), now)).toThrow()
   })
+  it('create once 畸形 at（NaN）抛错', () => {
+    const { svc } = makeService()
+    expect(() => svc.create(input({ schedule: { type: 'once', at: '' } }), new Date('2026-01-15T10:00:00'))).toThrow()
+  })
   it('update 改调度后重算 nextRunAt；setEnabled(false) 清空', () => {
     const { svc } = makeService()
     const now = new Date('2026-01-15T10:00:00')
@@ -73,6 +77,14 @@ describe('TaskService.create/update/remove', () => {
     const t = svc.create(input())
     expect(svc.remove(t.id)).toBe(true)
     expect(svc.tasks).toHaveLength(0)
+  })
+  it('过期 once 任务：update 改名成功（不校验 once-future）；patch schedule 为过去 once 仍抛错', () => {
+    const { svc } = makeService()
+    const t = svc.create(input({ schedule: { type: 'once', at: '2026-01-15T10:30:00' } }), new Date('2026-01-15T10:00:00'))
+    const later = new Date('2026-01-15T11:00:00')
+    const updated = svc.update(t.id, { name: 'renamed' }, later)
+    expect(updated?.name).toBe('renamed')
+    expect(() => svc.update(t.id, { schedule: { type: 'once', at: '2026-01-15T10:30:00' } }, later)).toThrow()
   })
 })
 
@@ -132,6 +144,38 @@ describe('TaskService.tick 触发与防抖', () => {
     expect(rec.error).toContain('claude')
     expect(notified).toHaveLength(1)
   })
+  it('runner promise reject → failed 记录（error=异常 message）+ active 清理', async () => {
+    let rejectFn!: (e: Error) => void
+    const promise = new Promise<RunRecord>((_, rej) => {
+      rejectFn = rej
+    })
+    const { svc } = makeService(() => ({ runId: 'run-rej', promise, kill: () => undefined }))
+    const task = svc.create(input())
+    svc.runNow(task.id)
+    expect(svc.isRunning(task.id)).toBe(true)
+    rejectFn(new Error('boom'))
+    await settle()
+    expect(svc.isRunning(task.id)).toBe(false)
+    const rec = svc.history.find((r) => r.id === 'run-rej')!
+    expect(rec.status).toBe('failed')
+    expect(rec.error).toBe('boom')
+  })
+  it('tick 单任务异常隔离：runner 同步抛错不阻断其他任务触发', () => {
+    const d = deferred()
+    const calls: string[] = []
+    const { svc, logs } = makeService((t) => {
+      if (t.name === 'bad') throw new Error('spawn fail')
+      calls.push(t.id)
+      return { runId: 'r', promise: d.promise, kill: () => undefined }
+    })
+    const bad = svc.create(input({ name: 'bad' }), new Date('2026-01-15T10:00:00'))
+    const good = svc.create(input({ name: 'good' }), new Date('2026-01-15T10:00:00'))
+    ;(bad as ScheduledTask).nextRunAt = '2026-01-15T10:00:00' // 两个任务都立即到期
+    ;(good as ScheduledTask).nextRunAt = '2026-01-15T10:00:00'
+    svc.tick(new Date('2026-01-15T10:00:01'))
+    expect(calls).toEqual([good.id])
+    expect(logs.some((l) => l.includes('bad') && l.includes('spawn fail'))).toBe(true)
+  })
 })
 
 describe('TaskService.load（错过标记）', () => {
@@ -148,6 +192,26 @@ describe('TaskService.load（错过标记）', () => {
     const missed = rebooted.history.find((r) => r.taskId === task.id && r.status === 'missed')
     expect(missed?.startedAt).toBe('2026-01-15T09:00:00') // 原样保留持久化的时刻串
     expect(new Date(rebooted.tasks[0].nextRunAt!).getTime() - new Date('2026-01-15T10:00:00').getTime()).toBe(5 * 60_000)
+  })
+  it('错过的 once 任务 load 后禁用不补跑', () => {
+    const calls: string[] = []
+    const d = deferred()
+    const { svc: seed } = makeService()
+    const task = seed.create(input({ schedule: { type: 'once', at: '2026-01-15T09:30:00' } }), new Date('2026-01-15T09:00:00'))
+    // 同一 storeDir 重建实例模拟重启；load 后 tick 不应补跑
+    const rebooted = new TaskService({
+      storeDir, runsDir, claudePath: '/fake/claude', env: {},
+      runner: (t) => {
+        calls.push(t.id)
+        return { runId: 'r2', promise: d.promise, kill: () => undefined }
+      }
+    })
+    rebooted.load(new Date('2026-01-15T10:00:00'))
+    expect(rebooted.tasks[0].enabled).toBe(false)
+    expect(rebooted.tasks[0].nextRunAt).toBeUndefined()
+    expect(rebooted.history.some((r) => r.taskId === task.id && r.status === 'missed')).toBe(true)
+    rebooted.tick(new Date('2026-01-15T10:00:30'))
+    expect(calls).toHaveLength(0)
   })
 })
 

@@ -22,10 +22,18 @@ export const useTaskStore = create<TaskState>()((set) => ({
   },
   refreshFromPush: (tasks, history) => set({ tasks, history }),
   setEnabled: async (id, enabled) => {
-    await window.api.tasks.setEnabled(id, enabled)
+    try {
+      await window.api.tasks.setEnabled(id, enabled)
+    } catch (e) {
+      console.error('set task enabled failed', e)
+    }
   },
   runNow: async (id) => {
-    await window.api.tasks.runNow(id)
+    try {
+      await window.api.tasks.runNow(id)
+    } catch (e) {
+      console.error('run task now failed', e)
+    }
   },
   create: async (input) => {
     try {
@@ -36,10 +44,18 @@ export const useTaskStore = create<TaskState>()((set) => ({
     }
   },
   update: async (id, patch) => {
-    await window.api.tasks.update(id, patch)
+    try {
+      await window.api.tasks.update(id, patch)
+    } catch (e) {
+      console.error('update task failed', e)
+    }
   },
   remove: async (id) => {
-    await window.api.tasks.remove(id)
+    try {
+      await window.api.tasks.remove(id)
+    } catch (e) {
+      console.error('remove task failed', e)
+    }
   }
 }))
 

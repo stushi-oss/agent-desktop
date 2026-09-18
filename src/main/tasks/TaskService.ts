@@ -20,14 +20,20 @@ export interface TaskServiceDeps {
   onChanged?: (tasks: ScheduledTask[], history: RunRecord[]) => void
 }
 
-function validateInput(input: TaskInput, now: Date): void {
+function validateInput(input: TaskInput, now: Date, opts: { onceFuture?: boolean } = {}): void {
   if (!input.name.trim() || !input.prompt.trim() || !input.cwd.trim()) {
     throw new Error('name/prompt/cwd required')
   }
   const s = input.schedule
   if (s.type === 'cron' && !isValidCronExpr(s.expr)) throw new Error('invalid cron expression')
   if (s.type === 'interval' && !(s.minutes > 0)) throw new Error('interval must be positive')
-  if (s.type === 'once' && new Date(s.at).getTime() <= now.getTime()) throw new Error('once schedule must be in the future')
+  // once-future 校验仅在调度本身变化时应用：改名等 patch 不应被已过期的 once 任务锁死
+  if (opts.onceFuture !== false && s.type === 'once') {
+    const at = new Date(s.at).getTime()
+    if (Number.isNaN(at) || at <= now.getTime()) {
+      throw new Error('once schedule must be a valid future date')
+    }
+  }
 }
 
 export class TaskService {
@@ -68,6 +74,10 @@ export class TaskService {
           status: 'missed'
         })
       }
+      if (this.disableExpiredOnce(t, now)) {
+        // 错过的 once 任务不补跑：标记 missed 后直接禁用，重算 nextRunAt 只会得到过去的时刻
+        continue
+      }
       t.nextRunAt = t.enabled ? this.nextOf(t, now) : undefined
     }
     this.history = trimHistory(this.history)
@@ -80,22 +90,40 @@ export class TaskService {
     return d?.toISOString()
   }
 
+  /** 错过的 once 任务不补跑：触发时刻已过则禁用并清空 nextRunAt（load/update/setEnabled 共用） */
+  private disableExpiredOnce(t: ScheduledTask, now: Date): boolean {
+    if (t.schedule.type === 'once' && t.enabled && new Date(t.schedule.at).getTime() <= now.getTime()) {
+      t.enabled = false
+      t.nextRunAt = undefined
+      return true
+    }
+    return false
+  }
+
   tick(now: Date = new Date()): void {
     let changed = false
     for (const t of this.tasks) {
-      if (!t.enabled) continue
-      if (isDue(t.nextRunAt, now)) {
-        if (this.active.has(t.id)) {
-          this.log(`[tasks] skip "${t.name}": previous run still active`)
-          t.nextRunAt = this.nextOf(t, now)
+      // 单任务异常（如脏数据导致 nextOf 解析失败）隔离：记日志后继续处理其余任务
+      try {
+        if (!t.enabled) continue
+        if (isDue(t.nextRunAt, now)) {
+          if (this.active.has(t.id)) {
+            this.log(`[tasks] skip "${t.name}": previous run still active`)
+            t.nextRunAt = this.nextOf(t, now)
+            changed = true
+            continue
+          }
+          this.fire(t, now)
           changed = true
-          continue
+        } else if (!t.nextRunAt) {
+          const next = this.nextOf(t, now)
+          if (next) {
+            t.nextRunAt = next
+            changed = true
+          }
         }
-        this.fire(t, now)
-        changed = true
-      } else if (!t.nextRunAt) {
-        t.nextRunAt = this.nextOf(t, now)
-        changed = true
+      } catch (err) {
+        this.log(`[tasks] tick error on "${t.name}": ${err instanceof Error ? err.message : String(err)}`)
       }
     }
     if (changed) {
@@ -116,6 +144,25 @@ export class TaskService {
       startedAt: now.toISOString(),
       status: 'running'
     }
+
+    if (handle) {
+      // 拿到 handle 立即登记 active + 挂接完成链，消除「进程在跑但未登记」的孤儿窗口
+      this.active.set(t.id, handle)
+      void handle.promise
+        .then((final) => {
+          this.active.delete(t.id)
+          this.finishRun(t, running, final)
+        })
+        .catch((err: unknown) => {
+          this.active.delete(t.id)
+          this.finishRun(t, running, {
+            status: 'failed',
+            error: err instanceof Error ? err.message : String(err),
+            finishedAt: new Date().toISOString()
+          })
+        })
+    }
+
     this.history = trimHistory([running, ...this.history])
     saveHistory(this.deps.storeDir, this.history)
     this.emit()
@@ -128,13 +175,7 @@ export class TaskService {
         error: 'claude executable not found',
         finishedAt: new Date().toISOString()
       })
-      return
     }
-    this.active.set(t.id, handle)
-    void handle.promise.then((final) => {
-      this.active.delete(t.id)
-      this.finishRun(t, running, final)
-    })
   }
 
   private finishRun(t: ScheduledTask, running: RunRecord, final: Partial<RunRecord>): void {
@@ -201,14 +242,16 @@ export class TaskService {
       timeoutMinutes: patch.timeoutMinutes ?? t.timeoutMinutes,
       notify
     }
-    validateInput(merged, now)
+    validateInput(merged, now, { onceFuture: patch.schedule !== undefined })
     Object.assign(t, {
       ...merged,
       model: merged.model || undefined,
       notify
     })
     if (patch.enabled !== undefined) t.enabled = patch.enabled
-    t.nextRunAt = t.enabled ? this.nextOf(t, now) : undefined
+    if (!this.disableExpiredOnce(t, now)) {
+      t.nextRunAt = t.enabled ? this.nextOf(t, now) : undefined
+    }
     this.persist()
     this.emit()
     return t
