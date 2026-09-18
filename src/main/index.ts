@@ -6,7 +6,7 @@ import { defaultShellFor, resolveWindowsShell, type ShellChoice } from './shellS
 import { nodePtyFactory } from './ptyFactory'
 import { SessionManager } from './session/SessionManager'
 import { TaskService } from './tasks/TaskService'
-import { registerIpc } from './ipc'
+import { registerIpc, hookAppShortcuts } from './ipc'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -24,6 +24,8 @@ function createWindow(): void {
       nodeIntegration: false
     }
   })
+  // 窗口（重）建后重挂应用快捷键（macOS activate 重建窗口场景）
+  mainWindow.webContents.once('did-finish-load', () => hookAppShortcuts(mainWindow!))
   if (process.env.ELECTRON_RENDERER_URL) {
     mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {

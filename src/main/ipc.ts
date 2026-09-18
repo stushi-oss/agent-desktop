@@ -23,6 +23,25 @@ function push(win: BrowserWindow | null, channel: string, payload: unknown): voi
   if (win && !win.isDestroyed()) win.webContents.send(channel, payload)
 }
 
+// 应用级快捷键：⌘/Ctrl+T 新会话、⌘/Ctrl+W 关会话、⌘/Ctrl+1-9 切换
+// before-input-event 拦截，避免 macOS 默认菜单把 ⌘W 变成关窗口。
+// 独立导出：窗口重建（macOS activate）后由 createWindow 重新挂载。
+const SHORTCUT_KEYS = new Set(['t', 'w', '1', '2', '3', '4', '5', '6', '7', '8', '9'])
+
+export function hookAppShortcuts(win: BrowserWindow): void {
+  if (win.isDestroyed()) return
+  win.webContents.removeAllListeners('before-input-event')
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown') return
+    if (!(input.meta || input.control) || input.alt || input.shift) return
+    const key = input.key.toLowerCase()
+    if (SHORTCUT_KEYS.has(key)) {
+      event.preventDefault()
+      push(win, 'app:shortcut', { key })
+    }
+  })
+}
+
 /** 注册 sessions + app + tasks 相关 IPC（registry/settings 由后续任务追加） */
 export function registerIpc(deps: IpcDeps): void {
   const { sessions, tasks } = deps
@@ -39,7 +58,8 @@ export function registerIpc(deps: IpcDeps): void {
 
   ipcMain.handle('app:pickDirectory', async () => {
     const win = deps.getWindow()
-    const r = await dialog.showOpenDialog(win!, {
+    if (!win || win.isDestroyed()) return null
+    const r = await dialog.showOpenDialog(win, {
       properties: ['openDirectory', 'createDirectory']
     })
     return r.canceled || r.filePaths.length === 0 ? null : r.filePaths[0]
@@ -61,20 +81,7 @@ export function registerIpc(deps: IpcDeps): void {
   sessions.onData((ev) => push(deps.getWindow(), CHANNELS.sessionData, ev))
   sessions.onExit((ev) => push(deps.getWindow(), CHANNELS.sessionExit, ev))
 
-  // 应用级快捷键：⌘/Ctrl+T 新会话、⌘/Ctrl+W 关会话、⌘/Ctrl+1-9 切换
-  // before-input-event 拦截，避免 macOS 默认菜单把 ⌘W 变成关窗口
-  const SHORTCUT_KEYS = new Set(['t', 'w', '1', '2', '3', '4', '5', '6', '7', '8', '9'])
+  // 首窗快捷键（窗口重建由 createWindow 内重新 hookAppShortcuts）
   const win = deps.getWindow()
-  if (win && !win.isDestroyed()) {
-    win.webContents.removeAllListeners('before-input-event')
-    win.webContents.on('before-input-event', (event, input) => {
-      if (input.type !== 'keyDown') return
-      if (!(input.meta || input.control) || input.alt || input.shift) return
-      const key = input.key.toLowerCase()
-      if (SHORTCUT_KEYS.has(key)) {
-        event.preventDefault()
-        push(win, 'app:shortcut', { key })
-      }
-    })
-  }
+  if (win) hookAppShortcuts(win)
 }

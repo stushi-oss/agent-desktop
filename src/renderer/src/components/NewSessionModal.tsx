@@ -9,12 +9,20 @@ export function NewSessionModal({ onClose }: { onClose: () => void }) {
   const [cwd, setCwd] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
+  // 只在挂载时弹一次目录选择；空依赖 + cancelled 守卫
+  // （依赖 onClose 会因父组件每次渲染的新内联箭头函数而重触发原生 picker）
   useEffect(() => {
+    let cancelled = false
     void window.api.app.pickDirectory().then((dir) => {
+      if (cancelled) return
       if (!dir) onClose()
       else setCwd(dir)
     })
-  }, [onClose])
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const confirm = async (): Promise<void> => {
     if (!cwd || busy) return
