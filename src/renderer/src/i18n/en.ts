@@ -20,7 +20,7 @@ export const en: TranslationShape = {
     pmBypass: 'Bypass all permissions', pmRisk: 'Bypassing permissions lets Claude run commands and write files without confirmation. Only for fully trusted tasks.',
     model: 'Model (optional, blank = default)', timeout: 'Timeout (minutes)',
     notifyComplete: 'Notify on complete', notifyFailure: 'Notify on failure', enabled: 'Enabled',
-    nextRun: 'Next Run', lastStatus: 'Last Status', runNow: 'Run Now', history: 'Run History',
+    nextRun: 'Next Run', lastStatus: 'Last Status', runNow: 'Run Now', history: 'Run History', noHistory: 'No runs yet',
     viewTranscript: 'View Transcript',
     statusRunning: 'Running', statusSuccess: 'Success', statusFailed: 'Failed', statusMissed: 'Missed',
     vNameRequired: 'Name is required', vPromptRequired: 'Prompt is required', vCwdRequired: 'Choose a working directory',

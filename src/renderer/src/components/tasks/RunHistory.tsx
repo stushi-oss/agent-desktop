@@ -6,6 +6,7 @@ import { formatDateTime } from '@/lib/format'
 import { TranscriptView } from './TranscriptView'
 
 function durationOf(rec: RunRecord): string | null {
+  if (rec.status === 'missed') return null
   if (!rec.finishedAt) return null
   const ms = new Date(rec.finishedAt).getTime() - new Date(rec.startedAt).getTime()
   if (ms < 60_000) return `${Math.round(ms / 1000)}s`
@@ -19,7 +20,7 @@ export function RunHistory({ taskId }: { taskId: string }) {
   const [viewing, setViewing] = useState<RunRecord | null>(null)
 
   if (runs.length === 0) {
-    return <p style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('transcript.empty')}</p>
+    return <p style={{ color: 'var(--text-dim)', fontSize: 12 }}>{t('tasks.noHistory')}</p>
   }
 
   const statusText = (status: string): string =>
@@ -41,6 +42,7 @@ export function RunHistory({ taskId }: { taskId: string }) {
             </span>
           </div>
           {rec.resultText && <div className="result">{rec.resultText}</div>}
+          {rec.error && <div style={{ color: 'var(--danger)', fontSize: 12 }}>{rec.error}</div>}
           {rec.status !== 'running' && (
             <button className="link" onClick={() => setViewing(rec)}>{t('tasks.viewTranscript')}</button>
           )}

@@ -17,7 +17,9 @@ export function TranscriptView({ run, taskId, onClose }: Props) {
 
   useEffect(() => {
     let cancelled = false
-    void window.api.tasks.transcript(run).then((list) => { if (!cancelled) setItems(list) })
+    void window.api.tasks.transcript(run)
+      .then((list) => { if (!cancelled) setItems(list) })
+      .catch(() => { if (!cancelled) setItems([]) })
     return () => { cancelled = true }
   }, [run])
 

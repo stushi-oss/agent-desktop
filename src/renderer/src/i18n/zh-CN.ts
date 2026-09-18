@@ -18,7 +18,7 @@ export const zhCN = {
     pmBypass: '跳过所有权限', pmRisk: '跳过权限意味着 Claude 可不经确认执行命令/写文件，仅用于完全可信的任务。',
     model: '模型（可选，留空用默认）', timeout: '超时（分钟）',
     notifyComplete: '完成时通知', notifyFailure: '失败时通知', enabled: '启用',
-    nextRun: '下次运行', lastStatus: '最近状态', runNow: '立即运行', history: '运行历史',
+    nextRun: '下次运行', lastStatus: '最近状态', runNow: '立即运行', history: '运行历史', noHistory: '暂无运行记录',
     viewTranscript: '查看运行过程',
     statusRunning: '运行中', statusSuccess: '成功', statusFailed: '失败', statusMissed: '已错过',
     vNameRequired: '请填写名称', vPromptRequired: '请填写任务指令', vCwdRequired: '请选择工作目录',
