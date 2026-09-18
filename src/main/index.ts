@@ -1,11 +1,13 @@
 import { app, BrowserWindow } from 'electron'
 import { join } from 'node:path'
+import { homedir } from 'node:os'
 import { existsSync, mkdirSync } from 'node:fs'
 import { probeUserEnv, mergedEnv, resolveClaudePath } from './env'
 import { defaultShellFor, resolveWindowsShell, type ShellChoice } from './shellSelect'
 import { nodePtyFactory } from './ptyFactory'
 import { SessionManager } from './session/SessionManager'
 import { TaskService } from './tasks/TaskService'
+import { scanRegistry, createNodeScannerFs } from './registry/RegistryScanner'
 import { registerIpc, hookAppShortcuts } from './ipc'
 import { initNotifications, showNotification, setDockBadge } from './notifications'
 import { notifyTexts } from './notifyText'
@@ -93,11 +95,18 @@ app.whenReady().then(async () => {
   // 先建窗口再注册 IPC：registerIpc 里的快捷键转发依赖 getWindow() 非 null
   createWindow()
 
+  // 扩展扫描的 project 目录取当前活跃会话 cwd（无会话时 home）
+  let activeCwd = homedir()
+
   registerIpc({
     getWindow: () => mainWindow,
     sessions,
     tasks: taskService,
-    shellFor: () => shell
+    shellFor: () => shell,
+    scanRegistry: () => scanRegistry(createNodeScannerFs(), homedir(), activeCwd),
+    onSessionCreated: (cwd: string) => {
+      activeCwd = cwd
+    }
   })
 
   app.on('activate', () => {

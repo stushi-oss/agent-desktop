@@ -257,3 +257,37 @@ input, textarea, select { font: inherit; }
 .tr-result.is-error { border-color: var(--danger); }
 .tr-result .head { font-size: 11px; color: var(--text-dim); margin-bottom: 4px; }
 .tr-result .body { white-space: pre-wrap; word-break: break-word; color: var(--text-strong); font-size: 12.5px; }
+
+/* ===== 扩展抽屉 ===== */
+.seg-tabs { display: flex; gap: 4px; margin-bottom: 10px; }
+.seg-tabs button {
+  flex: 1; padding: 6px 0; border-radius: 6px; font-size: 12.5px;
+  color: var(--text-dim); border: 1px solid transparent;
+}
+.seg-tabs button.active {
+  color: var(--accent); background: var(--accent-soft); border-color: var(--accent);
+}
+.ext-search {
+  width: 100%; margin-bottom: 10px;
+  background: var(--bg-sidebar); color: var(--text-strong);
+  border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px;
+}
+.ext-search:focus { outline: none; border-color: var(--accent); }
+.ext-item {
+  display: flex; flex-direction: column; gap: 3px; width: 100%; text-align: left;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 6px;
+  background: var(--bg); cursor: pointer;
+}
+.ext-item:hover { border-color: var(--accent); }
+.ext-item .row1 { display: flex; align-items: center; gap: 8px; }
+.ext-item .name { color: var(--text-strong); font-size: 12.5px; font-weight: 600; }
+.ext-item .desc { color: var(--text-dim); font-size: 11.5px; line-height: 1.4; }
+.tag {
+  font-size: 10px; padding: 1px 6px; border-radius: 8px; margin-left: auto;
+  background: var(--accent-soft); color: var(--accent); white-space: nowrap;
+}
+.hint-bar {
+  font-size: 11.5px; color: var(--text-dim); background: var(--bg-sidebar);
+  border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; margin-bottom: 10px;
+}
+

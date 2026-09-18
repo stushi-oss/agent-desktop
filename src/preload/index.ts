@@ -1,5 +1,12 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
-import type { RunRecord, ScheduledTask, SessionSummary, TaskInput, TranscriptItem } from '@shared/types'
+import type {
+  RegistrySnapshot,
+  RunRecord,
+  ScheduledTask,
+  SessionSummary,
+  TaskInput,
+  TranscriptItem
+} from '@shared/types'
 
 const api = {
   sessions: {
@@ -24,6 +31,9 @@ const api = {
   app: {
     pickDirectory: (): Promise<string | null> => ipcRenderer.invoke('app:pickDirectory'),
     platform: process.platform
+  },
+  registry: {
+    scan: (): Promise<RegistrySnapshot> => ipcRenderer.invoke('registry:scan')
   },
   tasks: {
     list: (): Promise<ScheduledTask[]> => ipcRenderer.invoke('tasks:list'),

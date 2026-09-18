@@ -2,7 +2,7 @@ import { BrowserWindow, dialog, ipcMain } from 'electron'
 import type { SessionManager } from './session/SessionManager'
 import type { TaskService } from './tasks/TaskService'
 import type { ShellChoice } from './shellSelect'
-import type { RunRecord, SessionSummary, TaskInput } from '@shared/types'
+import type { RegistrySnapshot, RunRecord, SessionSummary, TaskInput } from '@shared/types'
 import { toTranscriptItems } from './tasks/streamJson'
 
 export interface IpcDeps {
@@ -10,6 +10,10 @@ export interface IpcDeps {
   sessions: SessionManager
   tasks: TaskService
   shellFor: (cwd: string) => ShellChoice
+  /** 扩展扫描：主进程实时扫描 ~/.claude + project */
+  scanRegistry: () => RegistrySnapshot
+  /** 会话创建后回调（index.ts 用它更新扩展扫描的 project 目录） */
+  onSessionCreated?: (cwd: string) => void
 }
 
 /** 渲染进程 ← 主进程推送（preload 里包装成 onXxx 订阅） */
@@ -42,13 +46,15 @@ export function hookAppShortcuts(win: BrowserWindow): void {
   })
 }
 
-/** 注册 sessions + app + tasks 相关 IPC（registry/settings 由后续任务追加） */
+/** 注册 sessions + app + tasks + registry 相关 IPC（settings 由后续任务追加） */
 export function registerIpc(deps: IpcDeps): void {
   const { sessions, tasks } = deps
 
-  ipcMain.handle('sessions:create', (_e, cwd: string): SessionSummary =>
-    sessions.create(cwd, 80, 24, deps.shellFor(cwd))
-  )
+  ipcMain.handle('sessions:create', (_e, cwd: string): SessionSummary => {
+    const summary = sessions.create(cwd, 80, 24, deps.shellFor(cwd))
+    deps.onSessionCreated?.(cwd)
+    return summary
+  })
   ipcMain.handle('sessions:write', (_e, id: string, data: string) => sessions.write(id, data))
   ipcMain.handle('sessions:resize', (_e, id: string, cols: number, rows: number) =>
     sessions.resize(id, cols, rows)
@@ -64,6 +70,9 @@ export function registerIpc(deps: IpcDeps): void {
     })
     return r.canceled || r.filePaths.length === 0 ? null : r.filePaths[0]
   })
+
+  // ---------- 扩展 ----------
+  ipcMain.handle('registry:scan', () => deps.scanRegistry())
 
   // ---------- 定时任务 ----------
   ipcMain.handle('tasks:list', () => tasks.tasks)
