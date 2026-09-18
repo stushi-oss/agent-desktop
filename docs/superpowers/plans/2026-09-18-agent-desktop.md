@@ -2811,14 +2811,15 @@ const task = (over: Partial<ScheduledTask> = {}): ScheduledTask => ({
   notify: { onComplete: true, onFailure: true }, createdAt: '2026-01-01T00:00:00.000Z', ...over
 })
 
-function ctx(env: NodeJS.ProcessEnv = {}): { ctx: RunContext; runsDir: string } {
+// 注意：辅助函数不能叫 ctx——`const { ctx } = ctx()` 是 TDZ ReferenceError
+function makeCtx(env: NodeJS.ProcessEnv = {}): { ctx: RunContext; runsDir: string } {
   const runsDir = mkdtempSync(join(tmpdir(), 'ad-runs-'))
   return { ctx: { claudePath: FIXTURE, env: { ...process.env, ...env }, runsDir }, runsDir }
 }
 
 describe('TaskRunner（真实 spawn 假 CLI）', () => {
   it('成功：status=success、exitCode=0、resultText、transcript 落盘', async () => {
-    const { ctx, runsDir } = ctx()
+    const { ctx, runsDir } = makeCtx()
     const handle = startRun(task(), ctx)
     const rec = await handle.promise
     expect(rec.status).toBe('success')
@@ -2833,14 +2834,14 @@ describe('TaskRunner（真实 spawn 假 CLI）', () => {
   })
 
   it('失败：EXIT_CODE=1 → status=failed', async () => {
-    const { ctx } = ctx({ EXIT_CODE: '1' })
+    const { ctx } = makeCtx({ EXIT_CODE: '1' })
     const rec = await startRun(task(), ctx).promise
     expect(rec.status).toBe('failed')
     expect(rec.exitCode).toBe(1)
   })
 
   it('超时：timeoutMs 后杀进程 → failed + error 含 timeout', async () => {
-    const { ctx } = ctx({ SLOW_SEC: '3' })
+    const { ctx } = makeCtx({ SLOW_SEC: '3' })
     const handle = startRun(task({ timeoutMinutes: 30 }), ctx, { timeoutMs: 300 })
     const rec = await handle.promise
     expect(rec.status).toBe('failed')
