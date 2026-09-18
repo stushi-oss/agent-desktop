@@ -24,4 +24,7 @@ describe('validateTaskForm（返回 i18n key）', () => {
     expect(validateTaskForm({ ...base, schedule: { type: 'once', at: '2026-01-15T09:00:00' } }, NOW).schedule).toBe('tasks.vOnceFuture')
     expect(validateTaskForm({ ...base, schedule: { type: 'once', at: '2026-01-16T09:00:00' } }, NOW)).toEqual({})
   })
+  it('once 日期非法（清空输入）→ vOnceFuture', () => {
+    expect(validateTaskForm({ ...base, schedule: { type: 'once', at: '' } }, NOW).schedule).toBe('tasks.vOnceFuture')
+  })
 })

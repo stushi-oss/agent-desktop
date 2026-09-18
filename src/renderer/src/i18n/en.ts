@@ -25,7 +25,7 @@ export const en: TranslationShape = {
     statusRunning: 'Running', statusSuccess: 'Success', statusFailed: 'Failed', statusMissed: 'Missed',
     vNameRequired: 'Name is required', vPromptRequired: 'Prompt is required', vCwdRequired: 'Choose a working directory',
     vCronInvalid: 'Invalid cron expression (5 fields)', vIntervalPositive: 'Interval must be > 0',
-    vOnceFuture: 'Time must be in the future',
+    vOnceFuture: 'Time must be in the future', saveFailed: 'Save failed — check input or try again',
     summaryNext: 'Next Task', summaryNone: 'No upcoming task', summaryMore: '{{count}} more tasks',
     runningCount: '{{count}} running'
   },

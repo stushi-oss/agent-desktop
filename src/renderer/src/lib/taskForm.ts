@@ -18,6 +18,9 @@ export function validateTaskForm(
   const s = input.schedule
   if (s.type === 'cron' && !isValidCronExpr(s.expr)) errors.schedule = 'tasks.vCronInvalid'
   else if (s.type === 'interval' && !(s.minutes > 0)) errors.schedule = 'tasks.vIntervalPositive'
-  else if (s.type === 'once' && new Date(s.at).getTime() <= now.getTime()) errors.schedule = 'tasks.vOnceFuture'
+  else if (s.type === 'once') {
+    const at = new Date(s.at).getTime()
+    if (Number.isNaN(at) || at <= now.getTime()) errors.schedule = 'tasks.vOnceFuture'
+  }
   return errors
 }

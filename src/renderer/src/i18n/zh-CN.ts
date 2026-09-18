@@ -23,7 +23,7 @@ export const zhCN = {
     statusRunning: '运行中', statusSuccess: '成功', statusFailed: '失败', statusMissed: '已错过',
     vNameRequired: '请填写名称', vPromptRequired: '请填写任务指令', vCwdRequired: '请选择工作目录',
     vCronInvalid: 'Cron 表达式无效（应为 5 段）', vIntervalPositive: '间隔必须大于 0',
-    vOnceFuture: '执行时间必须在未来',
+    vOnceFuture: '执行时间必须在未来', saveFailed: '保存失败，请检查输入或稍后重试',
     summaryNext: '下一个任务', summaryNone: '无待触发任务', summaryMore: '另有 {{count}} 个任务',
     runningCount: '{{count}} 个任务运行中'
   },

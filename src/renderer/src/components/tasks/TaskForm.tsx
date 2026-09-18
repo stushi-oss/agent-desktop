@@ -32,12 +32,15 @@ export function TaskForm({ initial, onSubmit, onCancel }: Props) {
   const [notifyComplete, setNotifyComplete] = useState(initial?.notify.onComplete ?? true)
   const [notifyFailure, setNotifyFailure] = useState(initial?.notify.onFailure ?? true)
   const [errors, setErrors] = useState<TaskFormErrors>({})
+  const [saveFailed, setSaveFailed] = useState(false)
   const [busy, setBusy] = useState(false)
 
   const buildSchedule = (): Schedule => {
     if (scheduleType === 'cron') return { type: 'cron', expr: cronExpr.trim() }
     if (scheduleType === 'interval') return { type: 'interval', minutes: Number(intervalMin) || 0 }
-    return { type: 'once', at: new Date(onceAt).toISOString() }
+    // 日期被清空时 toISOString 会抛 RangeError，原样传给校验层报 vOnceFuture
+    const d = new Date(onceAt)
+    return Number.isNaN(d.getTime()) ? { type: 'once', at: onceAt } : { type: 'once', at: d.toISOString() }
   }
 
   const submit = async (): Promise<void> => {
@@ -46,6 +49,7 @@ export function TaskForm({ initial, onSubmit, onCancel }: Props) {
     setErrors(errs)
     if (Object.keys(errs).length > 0) return
     setBusy(true)
+    setSaveFailed(false)
     const ok = await onSubmit({
       name, prompt, cwd, schedule, permissionMode,
       model: model.trim() || undefined,
@@ -53,6 +57,7 @@ export function TaskForm({ initial, onSubmit, onCancel }: Props) {
       notify: { onComplete: notifyComplete, onFailure: notifyFailure }
     })
     setBusy(false)
+    setSaveFailed(!ok)
     if (ok) onCancel()
   }
 
@@ -130,6 +135,9 @@ export function TaskForm({ initial, onSubmit, onCancel }: Props) {
         <Toggle checked={notifyComplete} onChange={setNotifyComplete} label={t('tasks.notifyComplete')} />
         <Toggle checked={notifyFailure} onChange={setNotifyFailure} label={t('tasks.notifyFailure')} />
       </div>
+      {saveFailed && (
+        <div className="field"><span className="error">{t('tasks.saveFailed')}</span></div>
+      )}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
         <button className="btn" onClick={onCancel} disabled={busy}>{t('common.cancel')}</button>
         <button className="btn btn-primary" disabled={busy} onClick={() => void submit()}>{t('common.save')}</button>
