@@ -63,7 +63,7 @@
 ### 3.2 GUI 环境的 PATH 问题（macOS 关键坑）
 
 - macOS GUI 应用不继承登录 shell 的 PATH，可能找不到 `claude`。
-- 方案：首次启动用登录 shell（`zsh -l -i -c env`）探测用户环境，缓存 PATH 等变量，供 pty 与 headless 子进程使用。
+- 方案：首次启动用登录 shell（`$SHELL -l -i -c env`，通常为 zsh）探测用户环境，缓存 PATH 等变量，供 pty 与 headless 子进程使用。
 - Windows GUI 应用继承注册表系统+用户 PATH，直接用 `process.env`；仅保留 `%USERPROFILE%\.local\bin\claude.exe` 显式兜底。
 - **claude 探测顺序**：`~/.local/bin/claude(.exe)` → 探测缓存 PATH 中查找 → 找不到时 UI 横幅引导（不阻塞普通 shell 会话）。
 
@@ -113,7 +113,7 @@ interface RunRecord {
 ### 4.3 调度语义
 
 - **错过的任务**：应用未运行期间到点的任务，启动时标记 `missed`（不自动补跑；可手动"立即运行"）。
-- **并发防抖**：同一任务上次仍在 running 时不重复触发（记 skipped 日志，不算 failure）；不同任务并行无全局上限。
+- **并发防抖**：同一任务上次仍在 running 时不重复触发；跳过仅写入主进程日志（**不产生 RunRecord**，历史时间线不显示）；不同任务并行无全局上限。
 
 ### 4.4 持久化
 
