@@ -4659,8 +4659,8 @@ describe('scanRegistry', () => {
       { name: 'sp-skill', description: 'from plugin', source: 'plugin' }
     ])
     expect(snap.agents).toEqual([
-      { name: 'researcher', description: 'finds things', tools: 'Read, WebSearch', source: 'user' },
-      { name: 'proj-agent', description: 'pa', source: 'project' }
+      { name: 'proj-agent', description: 'pa', source: 'project' },
+      { name: 'researcher', description: 'finds things', tools: 'Read, WebSearch', source: 'user' }
     ])
     expect(snap.mcpServers).toEqual([
       { name: 'web', transport: 'stdio', command: 'npx', scope: 'user' },
@@ -4818,7 +4818,7 @@ export function scanRegistry(fs: ScannerFs, home: string, project: string): Regi
 ```
 
 Run: `npx vitest run src/main/registry/RegistryScanner.test.ts`
-Expected: 6 passed。
+Expected: 4 passed。
 
 - [ ] **Step 16.3: Commit**
 
