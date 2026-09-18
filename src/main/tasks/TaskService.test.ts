@@ -86,6 +86,29 @@ describe('TaskService.create/update/remove', () => {
     expect(updated?.name).toBe('renamed')
     expect(() => svc.update(t.id, { schedule: { type: 'once', at: '2026-01-15T10:30:00' } }, later)).toThrow()
   })
+  it('过期 once 任务 update({name}) 不唤醒：禁用 + 清 nextRunAt + tick 不触发', () => {
+    const d = deferred()
+    const calls: string[] = []
+    const { svc } = makeService((t) => {
+      calls.push(t.id)
+      return { runId: 'r', promise: d.promise, kill: () => undefined }
+    })
+    const task = svc.create(input({ schedule: { type: 'once', at: '2026-01-15T10:30:00' } }), new Date('2026-01-15T10:00:00'))
+    const updated = svc.update(task.id, { name: 'renamed' }, new Date('2026-01-15T11:00:00'))
+    expect(updated?.name).toBe('renamed')
+    expect(svc.tasks[0].enabled).toBe(false)
+    expect(svc.tasks[0].nextRunAt).toBeUndefined()
+    svc.tick(new Date('2026-01-15T11:00:30'))
+    expect(calls).toHaveLength(0)
+  })
+  it('setEnabled(true) 不复活过期 once 任务', () => {
+    const { svc } = makeService()
+    const task = svc.create(input({ schedule: { type: 'once', at: '2026-01-15T10:30:00' } }), new Date('2026-01-15T10:00:00'))
+    svc.setEnabled(task.id, false, new Date('2026-01-15T10:10:00'))
+    svc.setEnabled(task.id, true, new Date('2026-01-15T11:00:00'))
+    expect(svc.tasks[0].enabled).toBe(false)
+    expect(svc.tasks[0].nextRunAt).toBeUndefined()
+  })
 })
 
 describe('TaskService.tick 触发与防抖', () => {

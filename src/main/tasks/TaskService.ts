@@ -270,7 +270,9 @@ export class TaskService {
     const t = this.tasks.find((x) => x.id === id)
     if (!t) return
     t.enabled = enabled
-    t.nextRunAt = enabled ? this.nextOf(t, now) : undefined
+    if (!this.disableExpiredOnce(t, now)) {
+      t.nextRunAt = enabled ? this.nextOf(t, now) : undefined
+    }
     this.persist()
     this.emit()
   }
