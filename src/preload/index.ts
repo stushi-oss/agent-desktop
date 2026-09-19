@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import type {
+  AppSettings,
   RegistrySnapshot,
   RunRecord,
   ScheduledTask,
@@ -30,7 +31,12 @@ const api = {
   },
   app: {
     pickDirectory: (): Promise<string | null> => ipcRenderer.invoke('app:pickDirectory'),
-    platform: process.platform
+    platform: process.platform,
+    getSettings: (): Promise<AppSettings> => ipcRenderer.invoke('app:getSettings'),
+    setSettings: (patch: Partial<AppSettings>): Promise<AppSettings> =>
+      ipcRenderer.invoke('app:setSettings', patch),
+    getClaudeStatus: (): Promise<{ found: boolean; candidates: string[] }> =>
+      ipcRenderer.invoke('app:getClaudeStatus')
   },
   registry: {
     scan: (): Promise<RegistrySnapshot> => ipcRenderer.invoke('registry:scan')
@@ -55,6 +61,11 @@ const api = {
     const listener = (_e: IpcRendererEvent, s: { key: string }) => cb(s)
     ipcRenderer.on('app:shortcut', listener)
     return () => ipcRenderer.removeListener('app:shortcut', listener)
+  },
+  onSettingsChanged: (cb: (s: AppSettings) => void): (() => void) => {
+    const listener = (_e: IpcRendererEvent, s: AppSettings) => cb(s)
+    ipcRenderer.on('app:settingsChanged', listener)
+    return () => ipcRenderer.removeListener('app:settingsChanged', listener)
   },
   onOpenTasks: (cb: () => void): (() => void) => {
     const listener = (): void => cb()

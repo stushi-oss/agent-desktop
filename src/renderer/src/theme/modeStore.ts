@@ -15,7 +15,7 @@ export const useModeStore = create<ModeState>()((set) => ({
   setMode: (m) => {
     applyTheme(m)
     set({ mode: m, effective: effectiveTheme(m) })
-    // Task 18 接设置持久化后改为真实调用；当前 preload 无 setSettings，忽略可选调用
-    void Promise.resolve({ theme: m }).catch(() => undefined)
+    // 持久化主题；主进程侧 nativeTheme.themeSource 由 app:setSettings 处理器同步
+    void window.api.app.setSettings({ theme: m }).catch(() => undefined)
   }
 }))

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import './i18n'
+import { useTranslation } from 'react-i18next'
+import i18next from '@/i18n'
 import { applyTheme, effectiveTheme, watchSystemTheme } from '@/theme/theme'
 import { useModeStore } from '@/theme/modeStore'
 import { useSessionStore } from '@/stores/sessions'
@@ -10,8 +12,10 @@ import { NewSessionModal } from '@/components/NewSessionModal'
 import { TerminalPane } from '@/components/TerminalPane'
 import { TaskDrawer } from '@/components/tasks/TaskDrawer'
 import { ExtensionsDrawer } from '@/components/extensions/ExtensionsDrawer'
+import { SettingsModal } from '@/components/SettingsModal'
 
 export default function App() {
+  const { t } = useTranslation()
   const effective = useModeStore((s) => s.effective)
   const sessions = useSessionStore((s) => s.sessions)
   const activeId = useSessionStore((s) => s.activeId)
@@ -22,10 +26,26 @@ export default function App() {
   const refreshFromPush = useTaskStore((s) => s.refreshFromPush)
   const tasksRunning = useTaskStore(selectRunningCount)
   const [newSessionOpen, setNewSessionOpen] = useState(false)
-  // Task 18 接入设置弹窗；先保留开关状态
   const [tasksOpen, setTasksOpen] = useState(false)
   const [extOpen, setExtOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [claudeMissing, setClaudeMissing] = useState(false)
+
+  // 启动恢复持久化设置（主题/语言）；setMode 会回写一次相同值，无害
+  useEffect(() => {
+    void window.api.app.getSettings().then((s) => {
+      useModeStore.getState().setMode(s.theme)
+      const loc = s.locale === 'system'
+        ? (navigator.language.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en')
+        : s.locale
+      void i18next.changeLanguage(loc)
+    })
+  }, [])
+
+  // claude 缺失横幅
+  useEffect(() => {
+    void window.api.app.getClaudeStatus().then((s) => setClaudeMissing(!s.found))
+  }, [])
 
   useEffect(() => {
     // macOS 红绿灯藏在 titlebar 左侧，留出空间避免遮挡品牌
@@ -80,6 +100,12 @@ export default function App() {
         onOpenSettings={() => setSettingsOpen(true)}
         tasksRunning={tasksRunning}
       />
+      {claudeMissing && (
+        <div className="banner-warn">
+          ⚠️ <span>{t('sessions.claudeMissingBanner')}</span>
+          <button onClick={() => setSettingsOpen(true)}>{t('settings.title')}</button>
+        </div>
+      )}
       <div className="app-body">
         <SessionSidebar onNewSession={() => setNewSessionOpen(true)} onOpenTasks={() => setTasksOpen(true)} />
         <main className="terminal-area">
@@ -91,8 +117,7 @@ export default function App() {
       {newSessionOpen && <NewSessionModal onClose={() => setNewSessionOpen(false)} />}
       {tasksOpen && <TaskDrawer onClose={() => setTasksOpen(false)} />}
       {extOpen && <ExtensionsDrawer onClose={() => setExtOpen(false)} />}
-      {/* Task 18: {settingsOpen && <SettingsModal/>} */}
-      <span hidden>{`${settingsOpen}`}</span>
+      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
     </div>
   )
 }

@@ -1,8 +1,8 @@
-import { BrowserWindow, dialog, ipcMain } from 'electron'
+import { BrowserWindow, dialog, ipcMain, nativeTheme } from 'electron'
 import type { SessionManager } from './session/SessionManager'
 import type { TaskService } from './tasks/TaskService'
 import type { ShellChoice } from './shellSelect'
-import type { RegistrySnapshot, RunRecord, SessionSummary, TaskInput } from '@shared/types'
+import type { AppSettings, RegistrySnapshot, RunRecord, SessionSummary, TaskInput } from '@shared/types'
 import { toTranscriptItems } from './tasks/streamJson'
 
 export interface IpcDeps {
@@ -14,6 +14,13 @@ export interface IpcDeps {
   scanRegistry: () => RegistrySnapshot
   /** 会话创建后回调（index.ts 用它更新扩展扫描的 project 目录） */
   onSessionCreated?: (cwd: string) => void
+  /** 应用设置（load/save 由 index.ts 装配） */
+  settings: {
+    get(): AppSettings
+    set(patch: Partial<AppSettings>): AppSettings
+  }
+  /** claude 可执行文件探测结果（启动时一次） */
+  claudeStatus: { found: boolean; candidates: string[] }
 }
 
 /** 渲染进程 ← 主进程推送（preload 里包装成 onXxx 订阅） */
@@ -46,7 +53,7 @@ export function hookAppShortcuts(win: BrowserWindow): void {
   })
 }
 
-/** 注册 sessions + app + tasks + registry 相关 IPC（settings 由后续任务追加） */
+/** 注册 sessions + app + tasks + registry + settings 相关 IPC */
 export function registerIpc(deps: IpcDeps): void {
   const { sessions, tasks } = deps
 
@@ -73,6 +80,16 @@ export function registerIpc(deps: IpcDeps): void {
 
   // ---------- 扩展 ----------
   ipcMain.handle('registry:scan', () => deps.scanRegistry())
+
+  // ---------- 设置 ----------
+  ipcMain.handle('app:getSettings', () => deps.settings.get())
+  ipcMain.handle('app:setSettings', (_e, patch: Partial<AppSettings>) => {
+    const next = deps.settings.set(patch)
+    if (patch.theme) nativeTheme.themeSource = patch.theme
+    push(deps.getWindow(), 'app:settingsChanged', next)
+    return next
+  })
+  ipcMain.handle('app:getClaudeStatus', () => deps.claudeStatus)
 
   // ---------- 定时任务 ----------
   ipcMain.handle('tasks:list', () => tasks.tasks)

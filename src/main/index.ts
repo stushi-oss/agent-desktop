@@ -1,8 +1,10 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, nativeTheme } from 'electron'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { existsSync, mkdirSync } from 'node:fs'
-import { probeUserEnv, mergedEnv, resolveClaudePath } from './env'
+import { probeUserEnv, mergedEnv, resolveClaudePath, claudeCandidates } from './env'
+import { loadSettings, saveSettings } from './store/settings'
+import { createTray, type TrayWithMenu } from './tray'
 import { defaultShellFor, resolveWindowsShell, type ShellChoice } from './shellSelect'
 import { nodePtyFactory } from './ptyFactory'
 import { SessionManager } from './session/SessionManager'
@@ -39,6 +41,17 @@ function createWindow(): void {
 }
 
 app.whenReady().then(async () => {
+  // userData 下的持久化目录
+  const storeDir = join(app.getPath('userData'), 'store')
+  const runsDir = join(app.getPath('userData'), 'runs')
+  mkdirSync(storeDir, { recursive: true })
+  mkdirSync(runsDir, { recursive: true })
+
+  // ---- 设置（最前：nativeTheme 影响首帧底色） ----
+  const settingsPath = join(storeDir, 'settings.json')
+  let settings = loadSettings(settingsPath)
+  nativeTheme.themeSource = settings.theme
+
   const probed = await probeUserEnv(process.platform, process.env.SHELL)
   const env = mergedEnv(process.env, probed)
   const claudePath = resolveClaudePath(env, process.platform)
@@ -52,12 +65,6 @@ app.whenReady().then(async () => {
     env,
     launchClaude: claudePath !== null
   })
-
-  // userData 下的持久化目录
-  const storeDir = join(app.getPath('userData'), 'store')
-  const runsDir = join(app.getPath('userData'), 'runs')
-  mkdirSync(storeDir, { recursive: true })
-  mkdirSync(runsDir, { recursive: true })
 
   initNotifications()
 
@@ -107,6 +114,24 @@ app.whenReady().then(async () => {
   // 先建窗口再注册 IPC：registerIpc 里的快捷键转发依赖 getWindow() 非 null
   createWindow()
 
+  // ---- 托盘 + 关闭行为（依赖 createWindow 后的 mainWindow） ----
+  let quitting = false
+  app.on('before-quit', () => { quitting = true })
+  let tray: TrayWithMenu | null = null
+  const syncTray = (): void => {
+    if (settings.closeToTray && !tray && mainWindow) {
+      tray = createTray(mainWindow)
+      tray.rebuild(true)
+    }
+  }
+  mainWindow!.on('close', (e) => {
+    if (settings.closeToTray && !quitting) {
+      e.preventDefault()
+      mainWindow!.hide()
+    }
+  })
+  syncTray()
+
   // 扩展扫描的 project 目录取当前活跃会话 cwd（无会话时 home）
   let activeCwd = homedir()
 
@@ -118,11 +143,26 @@ app.whenReady().then(async () => {
     scanRegistry: () => scanRegistry(createNodeScannerFs(), homedir(), activeCwd),
     onSessionCreated: (cwd: string) => {
       activeCwd = cwd
-    }
+    },
+    settings: {
+      get: () => settings,
+      set: (patch) => {
+        settings = { ...settings, ...patch }
+        saveSettings(settingsPath, patch)
+        syncTray()
+        return settings
+      }
+    },
+    claudeStatus: { found: claudePath !== null, candidates: claudeCandidates(env, process.platform) }
   })
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    // closeToTray 隐藏的窗口：dock 图标点击应重新显示
+    else if (mainWindow && !mainWindow.isVisible()) {
+      mainWindow.show()
+      mainWindow.focus()
+    }
   })
 })
 
