@@ -36,5 +36,6 @@ export const PUSH_CHANNELS = {
   tasksChanged: 'tasks:changed',
   appShortcut: 'app:shortcut',
   appSettingsChanged: 'app:settingsChanged',
-  appOpenTasks: 'app:openTasks'
+  appOpenTasks: 'app:openTasks',
+  sessionsChanged: 'sessions:changed'
 } as const

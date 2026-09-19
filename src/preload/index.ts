@@ -33,6 +33,11 @@ const api = {
     ipcRenderer.on(PUSH_CHANNELS.sessionExit, listener)
     return () => ipcRenderer.removeListener(PUSH_CHANNELS.sessionExit, listener)
   },
+  onSessionsChanged: (cb: () => void): (() => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on(PUSH_CHANNELS.sessionsChanged, listener)
+    return () => ipcRenderer.removeListener(PUSH_CHANNELS.sessionsChanged, listener)
+  },
   app: {
     pickDirectory: (): Promise<string | null> => ipcRenderer.invoke(INVOKE_CHANNELS.app.pickDirectory),
     platform: process.platform,

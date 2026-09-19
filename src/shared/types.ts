@@ -75,11 +75,9 @@ export interface SessionSummary {
 }
 
 // ---------- 设置 ----------
-export interface AppSettings {
-  theme: 'system' | 'light' | 'dark'
-  locale: 'system' | 'zh-CN' | 'en'
-  closeToTray: boolean
-}
+// 单一事实来源：zod schema 在 ./schemas.ts；此处 re-export 保持向后兼容。
+// zod 运行时校验：setSettings handler 接 patch 时 parse。
+export type { AppSettings } from './schemas'
 
 // ---------- stream-json ----------
 export interface StreamEvent {

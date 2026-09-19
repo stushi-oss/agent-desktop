@@ -31,5 +31,6 @@ describe('@shared/channels', () => {
     expect(PUSH_CHANNELS.appShortcut).toBe('app:shortcut')
     expect(PUSH_CHANNELS.appSettingsChanged).toBe('app:settingsChanged')
     expect(PUSH_CHANNELS.appOpenTasks).toBe('app:openTasks')
+    expect(PUSH_CHANNELS.sessionsChanged).toBe('sessions:changed')
   })
 })

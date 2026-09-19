@@ -4,6 +4,7 @@ import type { TaskService } from './tasks/TaskService'
 import type { ShellChoice } from './shellSelect'
 import type { AppSettings, RegistrySnapshot, RunRecord, SessionSummary, TaskInput } from '@shared/types'
 import { INVOKE_CHANNELS, PUSH_CHANNELS } from '@shared/channels'
+import { AppSettingsPatchSchema } from '@shared/schemas'
 import { toTranscriptItems } from './tasks/streamJson'
 
 export interface IpcDeps {
@@ -54,13 +55,17 @@ export function registerIpc(deps: IpcDeps): void {
   ipcMain.handle(INVOKE_CHANNELS.sessions.create, (_e, cwd: string, launchClaude?: boolean): SessionSummary => {
     const summary = sessions.create(cwd, 80, 24, deps.shellFor(cwd), launchClaude ?? false)
     deps.onSessionCreated?.(cwd, summary.id)
+    push(deps.getWindow(), PUSH_CHANNELS.sessionsChanged, undefined)
     return summary
   })
   ipcMain.handle(INVOKE_CHANNELS.sessions.write, (_e, id: string, data: string) => sessions.write(id, data))
   ipcMain.handle(INVOKE_CHANNELS.sessions.resize, (_e, id: string, cols: number, rows: number) =>
     sessions.resize(id, cols, rows)
   )
-  ipcMain.handle(INVOKE_CHANNELS.sessions.kill, (_e, id: string) => sessions.kill(id))
+  ipcMain.handle(INVOKE_CHANNELS.sessions.kill, (_e, id: string) => {
+    sessions.kill(id)
+    push(deps.getWindow(), PUSH_CHANNELS.sessionsChanged, undefined)
+  })
   ipcMain.handle(INVOKE_CHANNELS.sessions.list, () => sessions.list())
   ipcMain.handle(INVOKE_CHANNELS.sessions.rename, (_e, id: string, title: string): boolean =>
     sessions.rename(id, title)
@@ -80,9 +85,12 @@ export function registerIpc(deps: IpcDeps): void {
 
   // ---------- 设置 ----------
   ipcMain.handle(INVOKE_CHANNELS.app.getSettings, () => deps.settings.get())
-  ipcMain.handle(INVOKE_CHANNELS.app.setSettings, (_e, patch: Partial<AppSettings>) => {
-    const next = deps.settings.set(patch)
-    if (patch.theme) nativeTheme.themeSource = patch.theme
+  ipcMain.handle(INVOKE_CHANNELS.app.setSettings, (_e, patch: unknown): AppSettings => {
+    // zod 严格校验：拒绝非法 theme / locale 长度 / 未知 key
+    // 抛 ZodError → IPC promise reject → renderer console.error
+    const parsed = AppSettingsPatchSchema.parse(patch)
+    const next = deps.settings.set(parsed)
+    if (parsed.theme) nativeTheme.themeSource = parsed.theme
     push(deps.getWindow(), PUSH_CHANNELS.appSettingsChanged, next)
     return next
   })
