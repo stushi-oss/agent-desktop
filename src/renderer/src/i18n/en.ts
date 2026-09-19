@@ -6,7 +6,7 @@ export const en: TranslationShape = {
     back: 'Back', confirm: 'Confirm', details: 'Details', minutes: 'min'
   },
   sessions: {
-    title: 'Terminal Sessions', new: 'New Session', empty: 'No sessions yet — click "New Session"',
+    title: 'Terminal Sessions', new: 'New Session', empty: 'No terminal sessions open yet',
     exited: 'Exited', restart: 'Restart Session', closeSession: 'Close Session',
     rename: 'Rename', copyPath: 'Copy Path',
     claudeMissingBanner: 'claude executable not found; sessions will start as plain shell (see Settings)'

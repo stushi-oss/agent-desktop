@@ -94,8 +94,7 @@ app.whenReady().then(async () => {
       : defaultShellFor(process.platform, env)
 
   const sessions = new SessionManager(nodePtyFactory, {
-    env,
-    launchClaude: claudePath !== null
+    env
   })
 
   initNotifications()
@@ -172,6 +171,15 @@ app.whenReady().then(async () => {
     },
     claudeStatus: { found: claudePath !== null, candidates: claudeCandidates(env, process.platform) }
   })
+
+  // 首启自动开一个 homedir 的纯 shell terminal（不自动启动 claude）。
+  // 不广播 session:created —— 渲染端 hydrate() 会通过 sessions.list() 拉到这个会话并激活第一个 tab，
+  // 避免与 hydrate 抢跑造成重复渲染。
+  {
+    const initialCwd = homedir()
+    sessions.create(initialCwd, 80, 24, shell, false)
+    activeCwd = initialCwd
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

@@ -38,12 +38,22 @@ export class SessionManager {
     private readonly factory: PtyFactory,
     private readonly defaults: {
       env: NodeJS.ProcessEnv
-      launchClaude: boolean
       claudeLaunchDelayMs?: number
     }
   ) {}
 
-  create(cwd: string, cols: number, rows: number, shell: ShellChoice): SessionSummary {
+  /**
+   * 创建一个 pty 会话。
+   * @param launchClaude 是否在该 shell 启动后延迟写入 `claude\r`。默认 false —— 新会话保持为纯 shell。
+   *                   仅显式 opt-in（new-session modal 走的就是 true）才会自动拉起 claude。
+   */
+  create(
+    cwd: string,
+    cols: number,
+    rows: number,
+    shell: ShellChoice,
+    launchClaude: boolean = false
+  ): SessionSummary {
     const id = randomUUID()
     const pty = this.factory({
       file: shell.file,
@@ -85,7 +95,7 @@ export class SessionManager {
       }
     })
 
-    if (this.defaults.launchClaude) {
+    if (launchClaude) {
       entry.claudeTimer = setTimeout(
         () => pty.write('claude\r'),
         this.defaults.claudeLaunchDelayMs ?? 600

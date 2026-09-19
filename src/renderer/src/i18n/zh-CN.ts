@@ -4,7 +4,7 @@ export const zhCN = {
     back: '返回', confirm: '确认', details: '详情', minutes: '分钟'
   },
   sessions: {
-    title: '终端会话', new: '新会话', empty: '暂无会话，点击「新会话」开始',
+    title: '终端会话', new: '新会话', empty: '尚未打开任何终端会话',
     exited: '已退出', restart: '重启会话', closeSession: '关闭会话',
     rename: '重命名', copyPath: '复制路径',
     claudeMissingBanner: '未找到 claude 可执行文件，会话将以纯 shell 启动（详情见设置）'

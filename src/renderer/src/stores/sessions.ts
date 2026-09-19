@@ -6,7 +6,7 @@ interface SessionState {
   activeId: string | null
   hydrate: () => Promise<void>
   activate: (id: string) => void
-  createAndActivate: (cwd: string) => Promise<SessionSummary | null>
+  createAndActivate: (cwd: string, launchClaude?: boolean) => Promise<SessionSummary | null>
   rename: (id: string, title: string) => void
   markExited: (id: string, code: number | undefined) => void
   close: (id: string) => Promise<void>
@@ -20,9 +20,9 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
     set({ sessions, activeId: sessions.length > 0 ? sessions[0].id : null })
   },
   activate: (id) => set({ activeId: id }),
-  createAndActivate: async (cwd) => {
+  createAndActivate: async (cwd, launchClaude = false) => {
     try {
-      const info = await window.api.sessions.create(cwd)
+      const info = await window.api.sessions.create(cwd, launchClaude)
       set((s) => ({ sessions: [...s.sessions, info], activeId: info.id }))
       return info
     } catch (e) {

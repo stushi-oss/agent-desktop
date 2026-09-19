@@ -89,9 +89,21 @@ input, textarea, select { font: inherit; }
 .terminal-host {
   height: 100%;
   background: var(--terminal-bg);
-  padding: 6px 4px 0 10px;
+  /* 去掉所有 padding：让 xterm 字符格子紧贴面板边缘，避免"被黑框包围"的视觉 */
+  padding: 0;
+  /* xterm 行距由 line-height 控制；1（无单位相对 font-size）让字符密度接近原生 Terminal.app */
+  line-height: 1;
 }
 .terminal-host.is-hidden { display: none; }
+
+/* xterm 内部 DOM 默认 viewport margin:1em 形成"黑色内框"，强制清零 */
+.terminal-host .xterm,
+.terminal-host .xterm-viewport,
+.terminal-host .xterm-screen {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+.terminal-host .xterm-viewport { background-color: transparent !important; }
 
 /* ===== 弹窗 ===== */
 .modal-overlay {
@@ -121,9 +133,21 @@ input, textarea, select { font: inherit; }
   display: flex; align-items: center; gap: 8px; padding: 0 10px;
   height: 40px; flex: none;
   background: var(--bg-sidebar); border-bottom: 1px solid var(--border);
+  /* 整条 titlebar 都是拖拽区，交互元素单独标记 no-drag */
   -webkit-app-region: drag;
 }
-.titlebar > * { -webkit-app-region: no-drag; }
+/* 交互元素必须显式排除，否则吞掉点击；
+   递归选择器确保孙级 button/input/select 也 no-drag；保留拖拽区域为连续矩形 */
+.titlebar button,
+.titlebar input,
+.titlebar textarea,
+.titlebar select,
+.titlebar a,
+.titlebar [role='tab'],
+.titlebar [role='button'],
+.titlebar [role='switch'] {
+  -webkit-app-region: no-drag;
+}
 /* macOS 红绿灯（hiddenInset）占据左侧，为品牌留出空间 */
 .platform-darwin .titlebar { padding-left: 84px; }
 .brand { font-weight: 700; font-size: 13px; color: var(--text-strong); margin-right: 4px; }
@@ -177,7 +201,15 @@ input, textarea, select { font: inherit; }
 .ctx-menu button:hover { background: var(--accent-soft); color: var(--text-strong); }
 
 /* ===== 终端区 ===== */
-.terminal-area { background: var(--terminal-bg); min-width: 0; min-height: 0; position: relative; }
+.terminal-area {
+  /* 透明：让 xterm 内部 .xterm-scrollable-element 的背景（theme.background）填满；
+     避免 terminal-area 自己的颜色与 xterm 主题不一致产生接缝或黑边 */
+  background: transparent;
+  min-width: 0; min-height: 0; position: relative;
+  display: flex; flex-direction: column;
+}
+.terminal-area > .terminal-host { flex: 1; min-height: 0; background: transparent; }
+.terminal-area > .terminal-host .xterm { height: 100%; }
 
 /* ===== 抽屉 ===== */
 .drawer {
@@ -307,4 +339,26 @@ input, textarea, select { font: inherit; }
 .settings-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
 .settings-row > label { color: var(--text-dim); font-size: 12.5px; }
 .candidates { margin: 4px 0 0; padding: 8px 10px 8px 20px; color: var(--text-dim); font-size: 11.5px; word-break: break-all; }
+
+/* ===== 主区空态（无会话时） ===== */
+.terminal-area > .empty-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  height: 100%; gap: 16px;
+  /* 不裸露 --terminal-bg 的纯黑；走主体面板色，让空态在两种主题下都不刺眼 */
+  background: var(--bg);
+}
+.terminal-area > .empty-state .empty-glyph {
+  font: 700 56px/1 ui-monospace, 'JetBrains Mono', Menlo, monospace;
+  color: var(--accent); letter-spacing: -.04em;
+  text-shadow: 0 0 24px var(--accent-soft);
+}
+.terminal-area > .empty-state .empty-title {
+  font-size: 14px; color: var(--text-strong); font-weight: 500;
+}
+.terminal-area > .empty-state .empty-cta { padding: 6px 16px; font-size: 13px; }
+.terminal-area > .empty-state .empty-hint {
+  font: 11px/1 ui-monospace, Menlo, monospace; color: var(--text-dim);
+  border: 1px solid var(--border); border-radius: 4px; padding: 2px 8px;
+  margin-top: 4px;
+}
 

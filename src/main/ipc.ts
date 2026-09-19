@@ -57,8 +57,8 @@ export function hookAppShortcuts(win: BrowserWindow): void {
 export function registerIpc(deps: IpcDeps): void {
   const { sessions, tasks } = deps
 
-  ipcMain.handle('sessions:create', (_e, cwd: string): SessionSummary => {
-    const summary = sessions.create(cwd, 80, 24, deps.shellFor(cwd))
+  ipcMain.handle('sessions:create', (_e, cwd: string, launchClaude?: boolean): SessionSummary => {
+    const summary = sessions.create(cwd, 80, 24, deps.shellFor(cwd), launchClaude ?? false)
     deps.onSessionCreated?.(cwd)
     return summary
   })

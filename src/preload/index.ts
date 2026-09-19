@@ -11,7 +11,8 @@ import type {
 
 const api = {
   sessions: {
-    create: (cwd: string): Promise<SessionSummary> => ipcRenderer.invoke('sessions:create', cwd),
+    create: (cwd: string, launchClaude?: boolean): Promise<SessionSummary> =>
+      ipcRenderer.invoke('sessions:create', cwd, launchClaude),
     write: (id: string, data: string): Promise<void> =>
       ipcRenderer.invoke('sessions:write', id, data),
     resize: (id: string, cols: number, rows: number): Promise<void> =>

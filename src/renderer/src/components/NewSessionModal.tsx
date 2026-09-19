@@ -27,7 +27,7 @@ export function NewSessionModal({ onClose }: { onClose: () => void }) {
   const confirm = async (): Promise<void> => {
     if (!cwd || busy) return
     setBusy(true)
-    const s = await createAndActivate(cwd)
+    const s = await createAndActivate(cwd, true)
     setBusy(false)
     if (s) onClose()
   }

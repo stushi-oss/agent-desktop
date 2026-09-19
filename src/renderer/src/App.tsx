@@ -109,9 +109,20 @@ export default function App() {
       <div className="app-body">
         <SessionSidebar onNewSession={() => setNewSessionOpen(true)} onOpenTasks={() => setTasksOpen(true)} />
         <main className="terminal-area">
-          {sessions.map((s) => (
-            <TerminalPane key={s.id} session={s} active={s.id === activeId} themeMode={effective} />
-          ))}
+          {sessions.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-glyph" aria-hidden>›_</div>
+              <div className="empty-title">{t('sessions.empty')}</div>
+              <button className="btn btn-primary empty-cta" onClick={() => setNewSessionOpen(true)}>
+                ＋ {t('sessions.new')}
+              </button>
+              <div className="empty-hint">⌘T</div>
+            </div>
+          ) : (
+            sessions.map((s) => (
+              <TerminalPane key={s.id} session={s} active={s.id === activeId} themeMode={effective} />
+            ))
+          )}
         </main>
       </div>
       {newSessionOpen && <NewSessionModal onClose={() => setNewSessionOpen(false)} />}

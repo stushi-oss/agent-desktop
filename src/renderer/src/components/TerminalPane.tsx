@@ -20,7 +20,7 @@ export function TerminalPane({ session, active, themeMode }: Props) {
   // 生命周期：一个 session 一个 Terminal 实例（保住 scrollback）
   useEffect(() => {
     const term = new Terminal({
-      fontSize: 13,
+      fontSize: 14,
       fontFamily: '"SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
       cursorBlink: true,
       allowProposedApi: true,
@@ -52,12 +52,18 @@ export function TerminalPane({ session, active, themeMode }: Props) {
         /* host 不可见时 fit 会抛错，忽略 */
       }
     }
+    // 多阶段 fit：rAF 一次 + 100ms 后再 fit 一次 + 500ms 后保险一次
+    // 处理 StrictMode 双挂载 + 主进程 IPC hydrate 之前的初始尺寸塌陷
     requestAnimationFrame(syncSize)
+    const t100 = setTimeout(syncSize, 100)
+    const t500 = setTimeout(syncSize, 500)
     const ro = new ResizeObserver(() => {
       if (hostRef.current?.offsetParent !== null) syncSize()
     })
     ro.observe(hostRef.current!)
     return () => {
+      clearTimeout(t100)
+      clearTimeout(t500)
       ro.disconnect()
       offData()
       term.dispose()
@@ -79,11 +85,6 @@ export function TerminalPane({ session, active, themeMode }: Props) {
       termRef.current?.focus()
     })
   }, [active, session.id])
-
-  // 主题切换（整体赋值，公开 API）
-  useEffect(() => {
-    if (termRef.current) termRef.current.options.theme = xtermThemeFor(themeMode)
-  }, [themeMode])
 
   return <div ref={hostRef} className={`terminal-host${active ? '' : ' is-hidden'}`} />
 }
