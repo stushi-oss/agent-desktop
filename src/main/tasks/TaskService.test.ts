@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -31,14 +31,16 @@ function makeService(runner?: StartRunFn) {
   const notified: Array<{ rec: RunRecord; task: ScheduledTask }> = []
   const logs: string[] = []
   const changes: number[] = []
+  const persistErrors: unknown[] = []
   const svc = new TaskService({
     storeDir, runsDir, claudePath: '/fake/claude', env: { PATH: '/x' },
     runner,
     log: (m) => logs.push(m),
     notify: (rec, task) => notified.push({ rec, task }),
-    onChanged: () => changes.push(changes.length)
+    onChanged: () => changes.push(changes.length),
+    onPersistError: (e) => persistErrors.push(e)
   })
-  return { svc, notified, logs }
+  return { svc, notified, logs, persistErrors }
 }
 
 describe('TaskService.create/update/remove', () => {
@@ -264,3 +266,27 @@ describe('TaskService.load（错过标记）', () => {
 async function settle(): Promise<void> {
   for (let i = 0; i < 5; i++) await Promise.resolve()
 }
+
+describe('finding #2: persist 失败不崩主进程', () => {
+  it('saveTasks 抛错时 fire 不抛，history 仍保留在内存', async () => {
+    const d = deferred()
+    const { svc, persistErrors, logs } = makeService(() => ({ runId: 'r', promise: d.promise, kill: () => undefined }))
+    // 让 saveTasks 抛 EACCES：模拟磁盘不可写（ESM export 是 getter，spyOn 才能覆盖）
+    const origStore = await import('../store/TaskStore')
+    const spy = vi.spyOn(origStore, 'saveTasks').mockImplementation(() => { throw new Error('EACCES') })
+    try {
+      const task = svc.create(input())
+      // create → safePersist('create') 抛错被吞；fire 不冒泡
+      expect(() => svc.runNow(task.id)).not.toThrow()
+      // history 应仍含 running 记录（内存状态没丢）
+      expect(svc.history.some((r) => r.taskId === task.id)).toBe(true)
+      // onPersistError 已被收集
+      expect(persistErrors.length).toBeGreaterThan(0)
+      expect((persistErrors[0] as Error).message).toBe('EACCES')
+      // log 也被记录（label 形如 create / fire-insert / runNow）
+      expect(logs.some((l) => l.includes('persist failed'))).toBe(true)
+    } finally {
+      spy.mockRestore()
+    }
+  })
+})

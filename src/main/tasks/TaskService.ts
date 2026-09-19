@@ -18,6 +18,8 @@ export interface TaskServiceDeps {
   log?: (msg: string) => void
   notify?: (rec: RunRecord, task: ScheduledTask) => void
   onChanged?: (tasks: ScheduledTask[], history: RunRecord[]) => void
+  /** 持久化失败回调：index.ts 接到后展示一次性 toast，避免主进程因 IO 错误退出 */
+  onPersistError?: (err: unknown) => void
 }
 
 function validateInput(input: TaskInput, now: Date, opts: { onceFuture?: boolean } = {}): void {
@@ -60,9 +62,18 @@ export class TaskService {
     saveHistory(this.deps.storeDir, this.history)
   }
 
-  /** Stub：Task 6 替换为完整 try/catch + onPersistError 通知 */
-  private safePersist(_label: string): void {
-    this.persist()
+  /**
+   * 集中 try/catch 包装器：捕获 EACCES/EROFS/ENOSPC 等 IO 错误，避免冒泡到 setInterval 回调导致主进程退出。
+   * - 写日志便于排查
+   * - 调用 onPersistError 回调，index.ts 接住后展示一次性 toast
+   */
+  private safePersist(label: string): void {
+    try {
+      this.persist()
+    } catch (err) {
+      this.log(`[tasks] persist failed (${label}): ${err instanceof Error ? err.message : String(err)}`)
+      this.deps.onPersistError?.(err)
+    }
   }
 
   load(now: Date = new Date()): void {
@@ -86,7 +97,7 @@ export class TaskService {
       t.nextRunAt = t.enabled ? this.nextOf(t, now) : undefined
     }
     this.history = trimHistory(this.history)
-    this.persist()
+    this.safePersist('load')
     this.emit()
   }
 
@@ -132,7 +143,7 @@ export class TaskService {
       }
     }
     if (changed) {
-      saveTasks(this.deps.storeDir, this.tasks)
+      this.safePersist('tick-changed')
       this.emit()
     }
   }
@@ -188,7 +199,7 @@ export class TaskService {
     }
 
     this.history = trimHistory([running, ...this.history])
-    saveHistory(this.deps.storeDir, this.history)
+    this.safePersist('fire-insert')
     this.emit()
 
     t.nextRunAt = this.nextOf(t, now)
@@ -205,12 +216,12 @@ export class TaskService {
   private finishRun(t: ScheduledTask, running: RunRecord, final: Partial<RunRecord>): void {
     const merged: RunRecord = { ...running, ...final, id: running.id, taskId: t.id }
     this.history = trimHistory(this.history.map((r) => (r.id === running.id ? merged : r)))
-    saveHistory(this.deps.storeDir, this.history)
+    this.safePersist('finish-run-history')
     if (t.schedule.type === 'once') {
       t.enabled = false
       t.nextRunAt = undefined
     }
-    saveTasks(this.deps.storeDir, this.tasks)
+    this.safePersist('finish-run-tasks')
     this.deps.notify?.(merged, t)
     this.emit()
   }
@@ -219,7 +230,7 @@ export class TaskService {
     const t = this.tasks.find((x) => x.id === taskId)
     if (!t || this.active.has(t.id)) return
     this.fire(t, now)
-    saveTasks(this.deps.storeDir, this.tasks)
+    this.safePersist('runNow')
     this.emit()
   }
 
@@ -244,7 +255,7 @@ export class TaskService {
     }
     task.nextRunAt = this.nextOf(task, now)
     this.tasks.push(task)
-    this.persist()
+    this.safePersist('create')
     this.emit()
     return task
   }
@@ -276,7 +287,7 @@ export class TaskService {
     if (!this.disableExpiredOnce(t, now)) {
       t.nextRunAt = t.enabled ? this.nextOf(t, now) : undefined
     }
-    this.persist()
+    this.safePersist('update')
     this.emit()
     return t
   }
@@ -285,7 +296,7 @@ export class TaskService {
     const before = this.tasks.length
     this.tasks = this.tasks.filter((t) => t.id !== id)
     if (this.tasks.length === before) return false
-    this.persist()
+    this.safePersist('remove')
     this.emit()
     return true
   }
@@ -297,7 +308,7 @@ export class TaskService {
     if (!this.disableExpiredOnce(t, now)) {
       t.nextRunAt = enabled ? this.nextOf(t, now) : undefined
     }
-    this.persist()
+    this.safePersist('setEnabled')
     this.emit()
   }
 
