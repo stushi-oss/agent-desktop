@@ -95,8 +95,8 @@ export default function App() {
     <div className="app-shell">
       <TitleBar
         onNewSession={() => setNewSessionOpen(true)}
-        onOpenTasks={() => setTasksOpen((v) => !v)}
-        onOpenExtensions={() => setExtOpen((v) => !v)}
+        onOpenTasks={() => setTasksOpen((v) => { if (!v) setExtOpen(false); return !v })}
+        onOpenExtensions={() => setExtOpen((v) => { if (!v) setTasksOpen(false); return !v })}
         onOpenSettings={() => setSettingsOpen(true)}
         tasksRunning={tasksRunning}
       />
