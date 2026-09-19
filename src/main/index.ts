@@ -62,8 +62,9 @@ function createWindow(): void {
   win.on('closed', () => {
     if (mainWindow === win) mainWindow = null
   })
-  // 窗口（重）建后重挂应用快捷键（macOS activate 重建窗口场景）
-  win.webContents.once('did-finish-load', () => hookAppShortcuts(win))
+  // 修复 finding #6：渲染端 reload (Cmd+R / dev hot reload) 会再次触发 did-finish-load；
+  // hookAppShortcuts 内部已 removeAllListeners('before-input-event') 保证幂等，故用 .on 而非 .once
+  win.webContents.on('did-finish-load', () => hookAppShortcuts(win))
   if (process.env.ELECTRON_RENDERER_URL) {
     win.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
