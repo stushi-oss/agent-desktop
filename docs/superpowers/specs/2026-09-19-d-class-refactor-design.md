@@ -131,7 +131,7 @@ export type PushChannel = typeof PUSH_CHANNELS[keyof typeof PUSH_CHANNELS]
 import { z } from 'zod'
 
 export const ThemeSchema = z.enum(['system', 'light', 'dark'])
-export const LocaleSchema = z.string().min(2).max(10)
+export const LocaleSchema = z.enum(['system', 'zh-CN', 'en'])
 
 export const AppSettingsSchema = z.object({
   theme: ThemeSchema,
