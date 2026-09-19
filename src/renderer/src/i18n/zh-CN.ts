@@ -38,7 +38,7 @@ export const zhCN = {
     title: '设置', theme: '主题', themeSystem: '跟随系统', themeLight: '浅色', themeDark: '深色',
     language: '语言', langSystem: '跟随系统', langZh: '中文', langEn: 'English',
     closeToTray: '关闭窗口时最小化到托盘（保证定时任务后台运行）',
-    claudeTitle: 'claude 可执行文件', claudeNotFound: '未找到，已尝试：'
+    claudeTitle: 'claude 可执行文件', claudeNotFound: '未找到，已尝试：', claudeFound: '已找到：'
   },
   notify: { done: '「{{name}}」已完成', failed: '「{{name}}」运行失败', clickDetail: '点击查看详情' },
   transcript: {

@@ -62,7 +62,9 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             </ul>
           </>
         ) : (
-          <div style={{ color: 'var(--success)', fontSize: 12 }}>✓ {t('settings.claudeTitle')}</div>
+          <div style={{ color: 'var(--success)', fontSize: 12 }}>
+            ✓ {t('settings.claudeFound')} {claude?.candidates[0] ?? ''}
+          </div>
         )}
       </div>
     </Modal>

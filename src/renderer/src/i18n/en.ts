@@ -40,7 +40,7 @@ export const en: TranslationShape = {
     title: 'Settings', theme: 'Theme', themeSystem: 'System', themeLight: 'Light', themeDark: 'Dark',
     language: 'Language', langSystem: 'System', langZh: '中文', langEn: 'English',
     closeToTray: 'Minimize to tray on close (keeps scheduled tasks running)',
-    claudeTitle: 'claude executable', claudeNotFound: 'Not found. Tried:'
+    claudeTitle: 'claude executable', claudeNotFound: 'Not found. Tried:', claudeFound: 'Found: '
   },
   notify: { done: '"{{name}}" finished', failed: '"{{name}}" failed', clickDetail: 'Click to view details' },
   transcript: {

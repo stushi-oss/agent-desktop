@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { existsSync, mkdirSync } from 'node:fs'
 import { probeUserEnv, mergedEnv, resolveClaudePath, claudeCandidates } from './env'
-import { loadSettings, saveSettings } from './store/settings'
+import { loadSettings, saveSettings, resolveLocale, SETTINGS_DEFAULT } from './store/settings'
 import { createTray, type TrayWithMenu } from './tray'
 import { defaultShellFor, resolveWindowsShell, type ShellChoice } from './shellSelect'
 import { nodePtyFactory } from './ptyFactory'
@@ -16,9 +16,30 @@ import { initNotifications, showNotification, setDockBadge } from './notificatio
 import { notifyTexts } from './notifyText'
 
 let mainWindow: BrowserWindow | null = null
+// close 守卫与托盘跟随每次 createWindow 生效，相关状态提升到模块作用域
+let quitting = false
+let settingsPath = ''
+let settings = { ...SETTINGS_DEFAULT }
+let tray: TrayWithMenu | null = null
+let trayWin: BrowserWindow | null = null // 托盘当前绑定的窗口；窗口重建后需重绑
+
+/** 托盘跟随设置与当前窗口：closeToTray 开→绑定最新窗口；关→销毁；每次刷新「退出」标签 */
+function syncTray(): void {
+  if (settings.closeToTray && mainWindow && trayWin !== mainWindow) {
+    tray?.destroy()
+    tray = createTray(mainWindow)
+    trayWin = mainWindow
+  }
+  if (!settings.closeToTray && tray) {
+    tray.destroy()
+    tray = null
+    trayWin = null
+  }
+  tray?.rebuild(settings.closeToTray)
+}
 
 function createWindow(): void {
-  mainWindow = new BrowserWindow({
+  const win = (mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
     minWidth: 960,
@@ -30,14 +51,25 @@ function createWindow(): void {
       contextIsolation: true,
       nodeIntegration: false
     }
+  }))
+  // close 守卫须随窗口（重）建挂上：否则重建后的窗口一关即退出，定时任务随之中断
+  win.on('close', (e) => {
+    if (settings.closeToTray && !quitting) {
+      e.preventDefault()
+      win.hide()
+    }
+  })
+  win.on('closed', () => {
+    if (mainWindow === win) mainWindow = null
   })
   // 窗口（重）建后重挂应用快捷键（macOS activate 重建窗口场景）
-  mainWindow.webContents.once('did-finish-load', () => hookAppShortcuts(mainWindow!))
+  win.webContents.once('did-finish-load', () => hookAppShortcuts(win))
   if (process.env.ELECTRON_RENDERER_URL) {
-    mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
+    win.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+    win.loadFile(join(__dirname, '../renderer/index.html'))
   }
+  syncTray() // 窗口可能被重建：托盘重绑到新窗口
 }
 
 app.whenReady().then(async () => {
@@ -48,8 +80,8 @@ app.whenReady().then(async () => {
   mkdirSync(runsDir, { recursive: true })
 
   // ---- 设置（最前：nativeTheme 影响首帧底色） ----
-  const settingsPath = join(storeDir, 'settings.json')
-  let settings = loadSettings(settingsPath)
+  settingsPath = join(storeDir, 'settings.json')
+  settings = loadSettings(settingsPath)
   nativeTheme.themeSource = settings.theme
 
   const probed = await probeUserEnv(process.platform, process.env.SHELL)
@@ -81,7 +113,7 @@ app.whenReady().then(async () => {
       setDockBadge(history.filter((r) => r.status === 'running').length)
     },
     notify: (rec, task) => {
-      const texts = notifyTexts(app.getLocale())
+      const texts = notifyTexts(resolveLocale(settings.locale, app.getLocale()))
       const failed = rec.status === 'failed'
       if (failed && !task.notify.onFailure) return
       if (!failed && rec.status !== 'success') return
@@ -114,23 +146,8 @@ app.whenReady().then(async () => {
   // 先建窗口再注册 IPC：registerIpc 里的快捷键转发依赖 getWindow() 非 null
   createWindow()
 
-  // ---- 托盘 + 关闭行为（依赖 createWindow 后的 mainWindow） ----
-  let quitting = false
+  // ---- 关闭行为 + 托盘（close 守卫在 createWindow 内挂；托盘由 createWindow 末尾的 syncTray 建立） ----
   app.on('before-quit', () => { quitting = true })
-  let tray: TrayWithMenu | null = null
-  const syncTray = (): void => {
-    if (settings.closeToTray && !tray && mainWindow) {
-      tray = createTray(mainWindow)
-      tray.rebuild(true)
-    }
-  }
-  mainWindow!.on('close', (e) => {
-    if (settings.closeToTray && !quitting) {
-      e.preventDefault()
-      mainWindow!.hide()
-    }
-  })
-  syncTray()
 
   // 扩展扫描的 project 目录取当前活跃会话 cwd（无会话时 home）
   let activeCwd = homedir()
