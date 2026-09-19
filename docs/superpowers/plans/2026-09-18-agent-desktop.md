@@ -5564,3 +5564,5 @@ tick 循环无错误隔离、transcript 写流无 error 监听（磁盘满崩整
 7. 扩展扫描的 project 目录仅在 sessions:create 时更新（多项目切换不重定向）
 8. Windows x64 安装包须在 Windows 宿主/CI 上执行 `npm run dist:win`（node-pty 交叉源码构建不支持）
 9. macOS 浅色主题下终端容器深色边环（spec 设计决策，最终视觉验收可复议）
+10. Windows shell 选择设置项未做（spec §3.1：设置里可选 PowerShell/PS7/cmd/Git Bash；现仅启动自动探测 pwsh→powershell→cmd，探测到 cmd 的用户无法改用）——终审发现
+11. 托盘菜单缺「新任务」项，且菜单文案硬编码中文不跟随语言设置（spec §5.3）——终审发现
