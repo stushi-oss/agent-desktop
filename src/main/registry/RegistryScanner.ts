@@ -42,17 +42,17 @@ function collectPluginSkillsDirs(fs: ScannerFs, dir: string, depth: number, out:
   }
 }
 
-export function scanSkills(fs: ScannerFs, home: string, project: string): SkillInfo[] {
+export function scanSkills(fs: ScannerFs, home: string, project?: string): SkillInfo[] {
   const out: SkillInfo[] = []
   scanSkillDirs(fs, fs.join(home, '.claude', 'skills'), 'user', out)
-  scanSkillDirs(fs, fs.join(project, '.claude', 'skills'), 'project', out)
+  if (project && project !== home) scanSkillDirs(fs, fs.join(project, '.claude', 'skills'), 'project', out)
   const pluginDirs: string[] = []
   collectPluginSkillsDirs(fs, fs.join(home, '.claude', 'plugins', 'cache'), 4, pluginDirs)
   for (const d of pluginDirs) scanSkillDirs(fs, d, 'plugin', out)
   return out.sort((a, b) => a.name.localeCompare(b.name))
 }
 
-export function scanAgents(fs: ScannerFs, home: string, project: string): AgentInfo[] {
+export function scanAgents(fs: ScannerFs, home: string, project?: string): AgentInfo[] {
   const out: AgentInfo[] = []
   const scan = (dir: string, source: 'user' | 'project'): void => {
     for (const entry of fs.listDir(dir)) {
@@ -63,13 +63,13 @@ export function scanAgents(fs: ScannerFs, home: string, project: string): AgentI
     }
   }
   scan(fs.join(home, '.claude', 'agents'), 'user')
-  scan(fs.join(project, '.claude', 'agents'), 'project')
+  if (project && project !== home) scan(fs.join(project, '.claude', 'agents'), 'project')
   return out.sort((a, b) => a.name.localeCompare(b.name))
 }
 
 interface RawMcpServer { type?: string; command?: string; url?: string }
 
-export function scanMcp(fs: ScannerFs, home: string, project: string): McpServerInfo[] {
+export function scanMcp(fs: ScannerFs, home: string, project?: string): McpServerInfo[] {
   const out: McpServerInfo[] = []
   const readConfig = (path: string, scope: 'user' | 'project'): void => {
     const text = fs.read(path)
@@ -86,15 +86,18 @@ export function scanMcp(fs: ScannerFs, home: string, project: string): McpServer
     }
   }
   readConfig(fs.join(home, '.claude.json'), 'user')
-  readConfig(fs.join(project, '.mcp.json'), 'project')
+  if (project && project !== home) readConfig(fs.join(project, '.mcp.json'), 'project')
   return out
 }
 
 export function scanRegistry(fs: ScannerFs, home: string, project: string): RegistrySnapshot {
+  // project === home（首启无会话时 activeCwd=home）会使用户级条目以 user+project
+  // 双重出现——跳过 project 维度
+  const proj = project === home ? undefined : project
   return {
     scannedAt: new Date().toISOString(),
-    skills: scanSkills(fs, home, project),
-    mcpServers: scanMcp(fs, home, project),
-    agents: scanAgents(fs, home, project)
+    skills: scanSkills(fs, home, proj),
+    mcpServers: scanMcp(fs, home, proj),
+    agents: scanAgents(fs, home, proj)
   }
 }

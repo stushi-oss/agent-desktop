@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useRegistryStore } from '@/stores/registry'
 import { useSessionStore } from '@/stores/sessions'
@@ -23,15 +23,24 @@ export function ExtensionsDrawer({ onClose }: { onClose: () => void }) {
   const scan = useRegistryStore((s) => s.scan)
   const activeId = useSessionStore((s) => s.activeId)
 
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   useEffect(() => {
     void scan()
   }, [scan])
+
+  useEffect(() => {
+    return () => {
+      if (flashTimer.current) clearTimeout(flashTimer.current)
+    }
+  }, [])
 
   const insert = (text: string): void => {
     if (!activeId) return
     void window.api.sessions.write(activeId, text)
     setInserted(text)
-    setTimeout(() => setInserted(null), 1200)
+    if (flashTimer.current) clearTimeout(flashTimer.current)
+    flashTimer.current = setTimeout(() => setInserted(null), 1200)
   }
 
   const items = useMemo<ExtItem[]>(() => {

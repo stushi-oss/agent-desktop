@@ -76,6 +76,12 @@ describe('scanRegistry', () => {
     expect(snap.mcpServers).toEqual([])
   })
 
+  it('project === home 时不重复扫描 project 维度（首启场景）', () => {
+    write(home, '.claude/skills/only/SKILL.md', SKILL_MD)
+    const snap = scanRegistry(createNodeScannerFs(), home, home)
+    expect(snap.skills).toEqual([{ name: 'my-skill', description: 'Does something useful', source: 'user' }])
+  })
+
   it('SKILL.md 缺 frontmatter 时 name 回退目录名', () => {
     write(home, '.claude/skills/bare/SKILL.md', 'just body')
     const snap = scanRegistry(createNodeScannerFs(), home, project)

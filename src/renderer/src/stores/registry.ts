@@ -21,6 +21,9 @@ export const useRegistryStore = create<RegistryState>()((set, get) => ({
     try {
       const snapshot = await window.api.registry.scan()
       set({ snapshot, lastScanAt: Date.now() })
+    } catch (e) {
+      // 扫描失败保留旧快照（不缓存失败，下次打开重试）
+      console.error('registry scan failed', e)
     } finally {
       set({ loading: false })
     }
