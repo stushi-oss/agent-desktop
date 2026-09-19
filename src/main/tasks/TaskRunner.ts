@@ -1,8 +1,9 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { createWriteStream, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import type { RunRecord, ScheduledTask, StreamEvent } from '@shared/types'
-import { extractResultText, parseStreamLine } from './streamJson'
+import type { RunRecord, ScheduledTask } from '@shared/types'
+import type { NormalizedEvent } from '@shared/streamEvents'
+import { extractResultText, parseEvents } from './streamJson'
 import { newId } from '../store/TaskStore'
 
 export interface RunContext {
@@ -49,7 +50,7 @@ export function startRun(task: ScheduledTask, ctx: RunContext, opts: RunOpts = {
   const spawnFn = opts.spawnFn ?? spawn
   const runId = newId()
   const startedAt = new Date().toISOString()
-  const events: StreamEvent[] = []
+  const events: NormalizedEvent[] = []
   let finished = false
   let timedOut = false
 
@@ -92,8 +93,8 @@ export function startRun(task: ScheduledTask, ctx: RunContext, opts: RunOpts = {
       while ((idx = buffer.indexOf('\n')) >= 0) {
         const line = buffer.slice(0, idx)
         buffer = buffer.slice(idx + 1)
-        const ev = parseStreamLine(line)
-        if (ev) events.push(ev)
+        // parseEvents 处理单行 raw 时返回 0 或 1 个 event；spread 累加到 events
+        events.push(...parseEvents(line))
       }
     })
     child.stderr?.setEncoding('utf8')
@@ -109,8 +110,7 @@ export function startRun(task: ScheduledTask, ctx: RunContext, opts: RunOpts = {
     child.on('close', (code) => {
       // flush 未换行结尾的末行，否则 transcript 有它但 extractResultText 拿不到
       if (buffer.trim()) {
-        const ev = parseStreamLine(buffer)
-        if (ev) events.push(ev)
+        events.push(...parseEvents(buffer))
         buffer = ''
       }
       settle({
