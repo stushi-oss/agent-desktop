@@ -5541,3 +5541,26 @@ git commit -m "chore(release): electron-builder 打包配置（dmg/nsis），mac
 
 
 
+
+---
+
+## 执行结果（2026-09-19，subagent-driven 完成）
+
+**19/19 任务完成**，每任务经规格评审 + 质量评审 + 修复循环。最终：109/109 测试、typecheck 0 错误、
+dmg（arm64）+ nsis exe 产物生成。评审共发现并修复 **10 个 Critical/Important 级真实缺陷**，包括：
+SessionManager 广播注册时序 bug（终端永无输出）、TaskService 过期 once 任务三扇"擅自补跑"门、
+tick 循环无错误隔离、transcript 写流无 error 监听（磁盘满崩整个应用）、probeUserEnv 挂起（rc 守护进程占管道）、
+存储层形状错误静默丢数据、主题 watcher 回归（系统切换不生效）、macOS ⌘W 被原生菜单抢占、
+通知点击在已销毁窗口上崩溃、close-guard 不跟随窗口重建。另有 5 处计划文档代码 bug 在实现中被抓出修正。
+
+### 已文档化、按计划 deferred 的跟进项
+
+1. claude 子进程进程组 kill（RunHandle.kill 已具备，未接入 before-quit 清理）
+2. tasks:transcript 改按 runId 查找（现信任渲染端传入的 transcriptPath）
+3. 渲染端 notify.* i18n key 为死键（主进程 notifyText 同义维护）
+4. 崩溃退出后遗留的 running 历史记录不清扫（角标可能虚高）
+5. 托盘 1x1 占位图标（打包前应换真实 assets 图标）
+6. 抽屉互斥仅覆盖 TitleBar 切换路径（通知点击/侧栏路径仍可叠放）
+7. 扩展扫描的 project 目录仅在 sessions:create 时更新（多项目切换不重定向）
+8. Windows x64 安装包须在 Windows 宿主/CI 上执行 `npm run dist:win`（node-pty 交叉源码构建不支持）
+9. macOS 浅色主题下终端容器深色边环（spec 设计决策，最终视觉验收可复议）
