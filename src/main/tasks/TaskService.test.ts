@@ -210,7 +210,7 @@ describe('TaskService.tick 触发与防抖', () => {
   it('tick 单任务异常隔离：runner 同步抛错不阻断其他任务触发', () => {
     const d = deferred()
     const calls: string[] = []
-    const { svc, logs } = makeService((t) => {
+    const { svc } = makeService((t) => {
       if (t.name === 'bad') throw new Error('spawn fail')
       calls.push(t.id)
       return { runId: 'r', promise: d.promise, kill: () => undefined }
@@ -220,8 +220,12 @@ describe('TaskService.tick 触发与防抖', () => {
     ;(bad as ScheduledTask).nextRunAt = '2026-01-15T10:00:00' // 两个任务都立即到期
     ;(good as ScheduledTask).nextRunAt = '2026-01-15T10:00:00'
     svc.tick(new Date('2026-01-15T10:00:01'))
+    // 隔离：'good' 仍被触发，'bad' 的 runner 抛错没阻断后续
     expect(calls).toEqual([good.id])
-    expect(logs.some((l) => l.includes('bad') && l.includes('spawn fail'))).toBe(true)
+    // 修复 finding #9：抛错也写 history，error 携带原始 message
+    const badRec = svc.history.find((r) => r.taskId === bad.id && r.status === 'failed')
+    expect(badRec).toBeDefined()
+    expect(badRec?.error).toContain('spawn fail')
   })
 })
 
@@ -288,5 +292,30 @@ describe('finding #2: persist 失败不崩主进程', () => {
     } finally {
       spy.mockRestore()
     }
+  })
+})
+
+describe('finding #9: runner 同步抛错写入 history', () => {
+  it('runner 同步抛异常时，history 含 failed 记录且有 error 信息', () => {
+    const d = deferred()
+    const { svc } = makeService((t) => {
+      if (t.name === 'boom') throw new Error('spawn fail sync')
+      return { runId: 'r', promise: d.promise, kill: () => undefined }
+    })
+    const task = svc.create(input({ name: 'boom' }), new Date('2026-01-15T10:00:00'))
+    ;(task as ScheduledTask).nextRunAt = '2026-01-15T10:00:00'
+    svc.tick(new Date('2026-01-15T10:00:01'))
+    const rec = svc.history.find((r) => r.taskId === task.id && r.status === 'failed')
+    expect(rec).toBeDefined()
+    expect(rec?.error).toContain('spawn fail sync')
+  })
+
+  it('runner 返回 null 时 history 含 failed 记录', () => {
+    const { svc } = makeService(() => null)
+    const task = svc.create(input({ name: 'nullish' }))
+    svc.runNow(task.id)
+    const rec = svc.history.find((r) => r.taskId === task.id && r.status === 'failed')
+    expect(rec).toBeDefined()
+    expect(rec?.error).toContain('runner')
   })
 })

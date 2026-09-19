@@ -7,7 +7,7 @@ import { parseStreamLine } from './streamJson'
 import { startRun, type RunContext, type RunHandle } from './TaskRunner'
 
 export type { RunContext }
-export type StartRunFn = (task: ScheduledTask, ctx: RunContext) => RunHandle
+export type StartRunFn = (task: ScheduledTask, ctx: RunContext) => RunHandle | null
 
 export interface TaskServiceDeps {
   storeDir: string
@@ -171,8 +171,14 @@ export class TaskService {
     const ctx: RunContext | null = this.deps.claudePath
       ? { claudePath: this.deps.claudePath, env: this.deps.env, runsDir: this.deps.runsDir }
       : null
-    // 先拿 handle：run 记录 id 与 runner 的 runId 对齐（transcript 文件名同源）
-    const handle = ctx ? this.runner(t, ctx) : null
+    // 修复 finding #9：runner 同步抛错时也要写 history
+    let handle: RunHandle | null = null
+    let runnerError: unknown = null
+    try {
+      handle = ctx ? this.runner(t, ctx) : null
+    } catch (err) {
+      runnerError = err
+    }
     const running: RunRecord = {
       id: handle?.runId ?? newId(),
       taskId: t.id,
@@ -204,10 +210,16 @@ export class TaskService {
 
     t.nextRunAt = this.nextOf(t, now)
 
-    if (!handle) {
+    if (runnerError) {
       this.finishRun(t, running, {
         status: 'failed',
-        error: 'claude executable not found',
+        error: runnerError instanceof Error ? runnerError.message : String(runnerError),
+        finishedAt: new Date().toISOString()
+      })
+    } else if (!handle) {
+      this.finishRun(t, running, {
+        status: 'failed',
+        error: 'runner returned null',
         finishedAt: new Date().toISOString()
       })
     }
