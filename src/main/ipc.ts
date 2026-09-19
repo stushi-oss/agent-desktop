@@ -68,6 +68,9 @@ export function registerIpc(deps: IpcDeps): void {
   )
   ipcMain.handle('sessions:kill', (_e, id: string) => sessions.kill(id))
   ipcMain.handle('sessions:list', () => sessions.list())
+  ipcMain.handle('sessions:rename', (_e, id: string, title: string): boolean =>
+    sessions.rename(id, title)
+  )
 
   ipcMain.handle('app:pickDirectory', async () => {
     const win = deps.getWindow()

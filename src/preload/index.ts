@@ -18,7 +18,9 @@ const api = {
     resize: (id: string, cols: number, rows: number): Promise<void> =>
       ipcRenderer.invoke('sessions:resize', id, cols, rows),
     kill: (id: string): Promise<void> => ipcRenderer.invoke('sessions:kill', id),
-    list: (): Promise<SessionSummary[]> => ipcRenderer.invoke('sessions:list')
+    list: (): Promise<SessionSummary[]> => ipcRenderer.invoke('sessions:list'),
+    rename: (id: string, title: string): Promise<boolean> =>
+      ipcRenderer.invoke('sessions:rename', id, title)
   },
   onSessionData: (cb: (ev: { id: string; data: string }) => void): (() => void) => {
     const listener = (_e: IpcRendererEvent, ev: { id: string; data: string }) => cb(ev)
