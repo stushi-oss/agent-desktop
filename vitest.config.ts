@@ -9,5 +9,10 @@ export default defineConfig({
       '@': resolve(__dirname, 'src/renderer/src')
     }
   },
-  test: { include: ['src/**/*.test.ts', 'tests/**/*.test.ts'], testTimeout: 20000 }
+  test: {
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'tests/**/*.test.ts'],
+    testTimeout: 20000,
+    environment: 'jsdom',
+    globals: false
+  }
 })

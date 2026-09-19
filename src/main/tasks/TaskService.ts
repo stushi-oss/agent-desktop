@@ -7,7 +7,7 @@ import { parseStreamLine } from './streamJson'
 import { startRun, type RunContext, type RunHandle } from './TaskRunner'
 
 export type { RunContext }
-export type StartRunFn = (task: ScheduledTask, ctx: RunContext) => RunHandle
+export type StartRunFn = (task: ScheduledTask, ctx: RunContext) => RunHandle | null
 
 export interface TaskServiceDeps {
   storeDir: string
@@ -18,6 +18,8 @@ export interface TaskServiceDeps {
   log?: (msg: string) => void
   notify?: (rec: RunRecord, task: ScheduledTask) => void
   onChanged?: (tasks: ScheduledTask[], history: RunRecord[]) => void
+  /** 持久化失败回调：index.ts 接到后展示一次性 toast，避免主进程因 IO 错误退出 */
+  onPersistError?: (err: unknown) => void
 }
 
 function validateInput(input: TaskInput, now: Date, opts: { onceFuture?: boolean } = {}): void {
@@ -60,6 +62,20 @@ export class TaskService {
     saveHistory(this.deps.storeDir, this.history)
   }
 
+  /**
+   * 集中 try/catch 包装器：捕获 EACCES/EROFS/ENOSPC 等 IO 错误，避免冒泡到 setInterval 回调导致主进程退出。
+   * - 写日志便于排查
+   * - 调用 onPersistError 回调，index.ts 接住后展示一次性 toast
+   */
+  private safePersist(label: string): void {
+    try {
+      this.persist()
+    } catch (err) {
+      this.log(`[tasks] persist failed (${label}): ${err instanceof Error ? err.message : String(err)}`)
+      this.deps.onPersistError?.(err)
+    }
+  }
+
   load(now: Date = new Date()): void {
     const data = loadStore(this.deps.storeDir)
     this.tasks = data.tasks
@@ -81,7 +97,7 @@ export class TaskService {
       t.nextRunAt = t.enabled ? this.nextOf(t, now) : undefined
     }
     this.history = trimHistory(this.history)
-    this.persist()
+    this.safePersist('load')
     this.emit()
   }
 
@@ -127,17 +143,42 @@ export class TaskService {
       }
     }
     if (changed) {
-      saveTasks(this.deps.storeDir, this.tasks)
+      this.safePersist('tick-changed')
       this.emit()
     }
   }
 
   private fire(t: ScheduledTask, now: Date): void {
+    // 修复 finding #1：claudePath 缺失时直接失败 + 禁用，避免 interval/cron 任务每 tick 重跑
+    if (!this.deps.claudePath) {
+      const failed: RunRecord = {
+        id: newId(),
+        taskId: t.id,
+        startedAt: now.toISOString(),
+        finishedAt: now.toISOString(),
+        status: 'failed',
+        error: 'claude executable not found'
+      }
+      this.history = trimHistory([failed, ...this.history])
+      this.safePersist('fire-claude-missing-insert')
+      t.enabled = false
+      t.nextRunAt = undefined
+      this.safePersist('fire-claude-missing-disable')
+      this.deps.notify?.(failed, t)
+      this.emit()
+      return
+    }
     const ctx: RunContext | null = this.deps.claudePath
       ? { claudePath: this.deps.claudePath, env: this.deps.env, runsDir: this.deps.runsDir }
       : null
-    // 先拿 handle：run 记录 id 与 runner 的 runId 对齐（transcript 文件名同源）
-    const handle = ctx ? this.runner(t, ctx) : null
+    // 修复 finding #9：runner 同步抛错时也要写 history
+    let handle: RunHandle | null = null
+    let runnerError: unknown = null
+    try {
+      handle = ctx ? this.runner(t, ctx) : null
+    } catch (err) {
+      runnerError = err
+    }
     const running: RunRecord = {
       id: handle?.runId ?? newId(),
       taskId: t.id,
@@ -164,15 +205,21 @@ export class TaskService {
     }
 
     this.history = trimHistory([running, ...this.history])
-    saveHistory(this.deps.storeDir, this.history)
+    this.safePersist('fire-insert')
     this.emit()
 
     t.nextRunAt = this.nextOf(t, now)
 
-    if (!handle) {
+    if (runnerError) {
       this.finishRun(t, running, {
         status: 'failed',
-        error: 'claude executable not found',
+        error: runnerError instanceof Error ? runnerError.message : String(runnerError),
+        finishedAt: new Date().toISOString()
+      })
+    } else if (!handle) {
+      this.finishRun(t, running, {
+        status: 'failed',
+        error: 'runner returned null',
         finishedAt: new Date().toISOString()
       })
     }
@@ -181,12 +228,12 @@ export class TaskService {
   private finishRun(t: ScheduledTask, running: RunRecord, final: Partial<RunRecord>): void {
     const merged: RunRecord = { ...running, ...final, id: running.id, taskId: t.id }
     this.history = trimHistory(this.history.map((r) => (r.id === running.id ? merged : r)))
-    saveHistory(this.deps.storeDir, this.history)
+    this.safePersist('finish-run-history')
     if (t.schedule.type === 'once') {
       t.enabled = false
       t.nextRunAt = undefined
     }
-    saveTasks(this.deps.storeDir, this.tasks)
+    this.safePersist('finish-run-tasks')
     this.deps.notify?.(merged, t)
     this.emit()
   }
@@ -195,7 +242,7 @@ export class TaskService {
     const t = this.tasks.find((x) => x.id === taskId)
     if (!t || this.active.has(t.id)) return
     this.fire(t, now)
-    saveTasks(this.deps.storeDir, this.tasks)
+    this.safePersist('runNow')
     this.emit()
   }
 
@@ -220,7 +267,7 @@ export class TaskService {
     }
     task.nextRunAt = this.nextOf(task, now)
     this.tasks.push(task)
-    this.persist()
+    this.safePersist('create')
     this.emit()
     return task
   }
@@ -252,7 +299,7 @@ export class TaskService {
     if (!this.disableExpiredOnce(t, now)) {
       t.nextRunAt = t.enabled ? this.nextOf(t, now) : undefined
     }
-    this.persist()
+    this.safePersist('update')
     this.emit()
     return t
   }
@@ -261,7 +308,7 @@ export class TaskService {
     const before = this.tasks.length
     this.tasks = this.tasks.filter((t) => t.id !== id)
     if (this.tasks.length === before) return false
-    this.persist()
+    this.safePersist('remove')
     this.emit()
     return true
   }
@@ -273,7 +320,7 @@ export class TaskService {
     if (!this.disableExpiredOnce(t, now)) {
       t.nextRunAt = enabled ? this.nextOf(t, now) : undefined
     }
-    this.persist()
+    this.safePersist('setEnabled')
     this.emit()
   }
 

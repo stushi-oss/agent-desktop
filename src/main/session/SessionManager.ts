@@ -33,6 +33,8 @@ export class SessionManager {
   // 类级监听器集合：注册时机与会话创建顺序解耦（IPC 广播在启动时注册，早于任何会话）
   private dataListeners = new Set<(ev: { id: string; data: string }) => void>()
   private exitListeners = new Set<(ev: { id: string; code: number | undefined }) => void>()
+  // 修复 #5 + #7：kill/delete 事件，供 index.ts 维护 activeCwd
+  private removeListeners = new Set<(ev: { id: string }) => void>()
 
   constructor(
     private readonly factory: PtyFactory,
@@ -118,6 +120,28 @@ export class SessionManager {
     if (entry.claudeTimer) clearTimeout(entry.claudeTimer)
     entry.pty.kill()
     entry.info.alive = false
+    // 修复 #5：从 Map 删除避免僵尸；#7 依赖此事件
+    this.sessions.delete(id)
+    for (const cb of this.removeListeners) {
+      try {
+        cb({ id })
+      } catch (err) {
+        console.error('[SessionManager] remove listener error', err)
+      }
+    }
+  }
+
+  /**
+   * 修复 #8：仅 alive=true 时接受；title 空或全空白拒绝。
+   * 持久化范围：仅内存（title 写入 entry.info.title）。重启后从 basename(cwd) 还原。
+   */
+  rename(id: string, title: string): boolean {
+    const entry = this.sessions.get(id)
+    if (!entry || !entry.info.alive) return false
+    const trimmed = title.trim()
+    if (!trimmed) return false
+    entry.info.title = trimmed
+    return true
   }
 
   list(): SessionSummary[] {
@@ -130,5 +154,9 @@ export class SessionManager {
 
   onExit(cb: (ev: { id: string; code: number | undefined }) => void): void {
     this.exitListeners.add(cb)
+  }
+
+  onRemove(cb: (ev: { id: string }) => void): void {
+    this.removeListeners.add(cb)
   }
 }

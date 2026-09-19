@@ -12,8 +12,8 @@ export interface IpcDeps {
   shellFor: (cwd: string) => ShellChoice
   /** 扩展扫描：主进程实时扫描 ~/.claude + project */
   scanRegistry: () => RegistrySnapshot
-  /** 会话创建后回调（index.ts 用它更新扩展扫描的 project 目录） */
-  onSessionCreated?: (cwd: string) => void
+  /** 会话创建后回调（index.ts 用它更新扩展扫描的 project 目录 + 当前活跃会话 id） */
+  onSessionCreated?: (cwd: string, sessionId: string) => void
   /** 应用设置（load/save 由 index.ts 装配） */
   settings: {
     get(): AppSettings
@@ -59,7 +59,7 @@ export function registerIpc(deps: IpcDeps): void {
 
   ipcMain.handle('sessions:create', (_e, cwd: string, launchClaude?: boolean): SessionSummary => {
     const summary = sessions.create(cwd, 80, 24, deps.shellFor(cwd), launchClaude ?? false)
-    deps.onSessionCreated?.(cwd)
+    deps.onSessionCreated?.(cwd, summary.id)
     return summary
   })
   ipcMain.handle('sessions:write', (_e, id: string, data: string) => sessions.write(id, data))
@@ -68,6 +68,9 @@ export function registerIpc(deps: IpcDeps): void {
   )
   ipcMain.handle('sessions:kill', (_e, id: string) => sessions.kill(id))
   ipcMain.handle('sessions:list', () => sessions.list())
+  ipcMain.handle('sessions:rename', (_e, id: string, title: string): boolean =>
+    sessions.rename(id, title)
+  )
 
   ipcMain.handle('app:pickDirectory', async () => {
     const win = deps.getWindow()

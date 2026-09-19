@@ -22,6 +22,8 @@ let settingsPath = ''
 let settings = { ...SETTINGS_DEFAULT }
 let tray: TrayWithMenu | null = null
 let trayWin: BrowserWindow | null = null // 托盘当前绑定的窗口；窗口重建后需重绑
+// 修复 finding #15：schedulerTimer 提到模块作用域，before-quit 时清理
+let schedulerTimer: NodeJS.Timeout | null = null
 
 /** 托盘跟随设置与当前窗口：closeToTray 开→绑定最新窗口；关→销毁；每次刷新「退出」标签 */
 function syncTray(): void {
@@ -62,8 +64,9 @@ function createWindow(): void {
   win.on('closed', () => {
     if (mainWindow === win) mainWindow = null
   })
-  // 窗口（重）建后重挂应用快捷键（macOS activate 重建窗口场景）
-  win.webContents.once('did-finish-load', () => hookAppShortcuts(win))
+  // 修复 finding #6：渲染端 reload (Cmd+R / dev hot reload) 会再次触发 did-finish-load；
+  // hookAppShortcuts 内部已 removeAllListeners('before-input-event') 保证幂等，故用 .on 而非 .once
+  win.webContents.on('did-finish-load', () => hookAppShortcuts(win))
   if (process.env.ELECTRON_RENDERER_URL) {
     win.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
@@ -136,7 +139,7 @@ app.whenReady().then(async () => {
     }
   })
   taskService.load()
-  const schedulerTimer = setInterval(() => taskService.tick(), 30_000)
+  schedulerTimer = setInterval(() => taskService.tick(), 30_000)
   schedulerTimer.unref()
 
   // 自定义应用菜单须在建窗前装好：macOS 默认菜单的 File>Close 会抢占 ⌘W
@@ -146,10 +149,26 @@ app.whenReady().then(async () => {
   createWindow()
 
   // ---- 关闭行为 + 托盘（close 守卫在 createWindow 内挂；托盘由 createWindow 末尾的 syncTray 建立） ----
-  app.on('before-quit', () => { quitting = true })
+  app.on('before-quit', () => {
+    quitting = true
+    if (schedulerTimer) {
+      clearInterval(schedulerTimer)
+      schedulerTimer = null
+    }
+  })
 
   // 扩展扫描的 project 目录取当前活跃会话 cwd（无会话时 home）
+  // 修复 finding #7：activeCwd 在活跃会话关闭时回退到 home
   let activeCwd = homedir()
+  let activeSessionId: string | null = null
+
+  // 订阅 onRemove：被移除的是当前活跃会话则重置
+  sessions.onRemove(({ id }) => {
+    if (id === activeSessionId) {
+      activeCwd = homedir()
+      activeSessionId = null
+    }
+  })
 
   registerIpc({
     getWindow: () => mainWindow,
@@ -157,8 +176,9 @@ app.whenReady().then(async () => {
     tasks: taskService,
     shellFor: () => shell,
     scanRegistry: () => scanRegistry(createNodeScannerFs(), homedir(), activeCwd),
-    onSessionCreated: (cwd: string) => {
+    onSessionCreated: (cwd, sessionId) => {
       activeCwd = cwd
+      activeSessionId = sessionId
     },
     settings: {
       get: () => settings,
@@ -177,8 +197,9 @@ app.whenReady().then(async () => {
   // 避免与 hydrate 抢跑造成重复渲染。
   {
     const initialCwd = homedir()
-    sessions.create(initialCwd, 80, 24, shell, false)
+    const initial = sessions.create(initialCwd, 80, 24, shell, false)
     activeCwd = initialCwd
+    activeSessionId = initial.id
   }
 
   app.on('activate', () => {

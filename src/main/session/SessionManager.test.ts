@@ -89,12 +89,56 @@ describe('SessionManager', () => {
     expect(mgr.list()[0].alive).toBe(false)
   })
 
-  it('kill 杀 pty 并标记退出', () => {
+  it('kill 杀 pty 并从 Map 删除', () => {
     const { mgr, created } = makeManager()
     const a = mgr.create('/a', 80, 24, shShell)
     mgr.kill(a.id)
     expect(created[0].killed).toBe(true)
-    expect(mgr.list()[0].alive).toBe(false)
+    expect(mgr.list().find((s) => s.id === a.id)).toBeUndefined()
+  })
+
+  it('kill 后 list() 不再返回该会话', () => {
+    const { mgr } = makeManager()
+    const a = mgr.create('/a', 80, 24, shShell)
+    const b = mgr.create('/b', 80, 24, shShell)
+    mgr.kill(a.id)
+    const ids = mgr.list().map((s) => s.id)
+    expect(ids).toEqual([b.id])
+  })
+
+  it('kill 触发 onRemove 事件，payload 含 id', () => {
+    const { mgr } = makeManager()
+    const removed: string[] = []
+    mgr.onRemove((ev) => removed.push(ev.id))
+    const a = mgr.create('/a', 80, 24, shShell)
+    mgr.kill(a.id)
+    expect(removed).toEqual([a.id])
+  })
+
+  it('rename alive=true 的会话更新 title 并返回 true', () => {
+    const { mgr } = makeManager()
+    const a = mgr.create('/Users/u/proj-a', 80, 24, shShell)
+    expect(mgr.rename(a.id, 'My Feature Branch')).toBe(true)
+    expect(mgr.list().find((s) => s.id === a.id)?.title).toBe('My Feature Branch')
+  })
+
+  it('rename 不存在的 id 返回 false', () => {
+    const { mgr } = makeManager()
+    expect(mgr.rename('nope', 'x')).toBe(false)
+  })
+
+  it('rename alive=false 的会话返回 false', () => {
+    const { mgr, created } = makeManager()
+    const a = mgr.create('/a', 80, 24, shShell)
+    created[0].exit(0) // 自然退出
+    expect(mgr.rename(a.id, 'new')).toBe(false)
+  })
+
+  it('rename 空 / 全空白 title 返回 false', () => {
+    const { mgr } = makeManager()
+    const a = mgr.create('/a', 80, 24, shShell)
+    expect(mgr.rename(a.id, '')).toBe(false)
+    expect(mgr.rename(a.id, '   ')).toBe(false)
   })
 
   it('kill 不存在的 id 不抛错', () => {

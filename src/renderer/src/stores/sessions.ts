@@ -30,8 +30,15 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
       return null
     }
   },
-  rename: (id, title) =>
-    set((s) => ({ sessions: s.sessions.map((x) => (x.id === id ? { ...x, title } : x)) })),
+  rename: async (id, title) => {
+    try {
+      const ok = await window.api.sessions.rename(id, title)
+      if (!ok) return
+      set((s) => ({ sessions: s.sessions.map((x) => (x.id === id ? { ...x, title } : x)) }))
+    } catch (e) {
+      console.error('rename session failed', e)
+    }
+  },
   markExited: (id, _code) =>
     set((s) => ({ sessions: s.sessions.map((x) => (x.id === id ? { ...x, alive: false } : x)) })),
   close: async (id) => {

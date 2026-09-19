@@ -17,6 +17,13 @@ export function TerminalPane({ session, active, themeMode }: Props) {
   const termRef = useRef<Terminal | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
 
+  // 修复：主题变化时实时更新已挂载终端的 theme（不重建实例，保住 scrollback）
+  useEffect(() => {
+    if (termRef.current) {
+      termRef.current.options.theme = xtermThemeFor(effectiveTheme(themeMode))
+    }
+  }, [themeMode])
+
   // 生命周期：一个 session 一个 Terminal 实例（保住 scrollback）
   useEffect(() => {
     const term = new Terminal({
@@ -25,7 +32,7 @@ export function TerminalPane({ session, active, themeMode }: Props) {
       cursorBlink: true,
       allowProposedApi: true,
       scrollback: 10000,
-      theme: xtermThemeFor(effectiveTheme('system'))
+      theme: xtermThemeFor(effectiveTheme(themeMode))
     })
     const fit = new FitAddon()
     term.loadAddon(fit)

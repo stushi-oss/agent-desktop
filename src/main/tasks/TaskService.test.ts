@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -31,14 +31,16 @@ function makeService(runner?: StartRunFn) {
   const notified: Array<{ rec: RunRecord; task: ScheduledTask }> = []
   const logs: string[] = []
   const changes: number[] = []
+  const persistErrors: unknown[] = []
   const svc = new TaskService({
     storeDir, runsDir, claudePath: '/fake/claude', env: { PATH: '/x' },
     runner,
     log: (m) => logs.push(m),
     notify: (rec, task) => notified.push({ rec, task }),
-    onChanged: () => changes.push(changes.length)
+    onChanged: () => changes.push(changes.length),
+    onPersistError: (e) => persistErrors.push(e)
   })
-  return { svc, notified, logs }
+  return { svc, notified, logs, persistErrors }
 }
 
 describe('TaskService.create/update/remove', () => {
@@ -167,6 +169,28 @@ describe('TaskService.tick 触发与防抖', () => {
     expect(rec.error).toContain('claude')
     expect(notified).toHaveLength(1)
   })
+  it('finding #1: claudePath 缺失时 interval 任务不循环 spam', () => {
+    const d = deferred()
+    const calls: string[] = []
+    const { svc, notified } = makeService(() => { calls.push('ran'); return { runId: 'r', promise: d.promise, kill: () => undefined } })
+    ;(svc as unknown as { deps: { claudePath: string | null } }).deps.claudePath = null
+    const task = svc.create(input({ schedule: { type: 'interval', minutes: 5 } }), new Date('2026-01-15T10:00:00'))
+    // 强制立即到期
+    ;(task as ScheduledTask).nextRunAt = '2026-01-15T10:00:00'
+    svc.tick(new Date('2026-01-15T10:00:01'))
+    expect(calls).toEqual([])  // claudePath=null 时不调 runner
+    expect(svc.tasks[0].enabled).toBe(false)  // 立即禁用
+    expect(svc.tasks[0].nextRunAt).toBeUndefined()
+    const failedRec = svc.history.find((r) => r.taskId === task.id && r.status === 'failed')
+    expect(failedRec).toBeDefined()
+    expect(failedRec?.error).toContain('claude')
+    // 第二次 tick：不会重复触发
+    svc.tick(new Date('2026-01-15T10:00:30'))
+    expect(calls).toEqual([])
+    expect(svc.history.filter((r) => r.taskId === task.id && r.status === 'failed')).toHaveLength(1)
+    // 通知只发一次
+    expect(notified).toHaveLength(1)
+  })
   it('runner promise reject → failed 记录（error=异常 message）+ active 清理', async () => {
     let rejectFn!: (e: Error) => void
     const promise = new Promise<RunRecord>((_, rej) => {
@@ -186,7 +210,7 @@ describe('TaskService.tick 触发与防抖', () => {
   it('tick 单任务异常隔离：runner 同步抛错不阻断其他任务触发', () => {
     const d = deferred()
     const calls: string[] = []
-    const { svc, logs } = makeService((t) => {
+    const { svc } = makeService((t) => {
       if (t.name === 'bad') throw new Error('spawn fail')
       calls.push(t.id)
       return { runId: 'r', promise: d.promise, kill: () => undefined }
@@ -196,8 +220,12 @@ describe('TaskService.tick 触发与防抖', () => {
     ;(bad as ScheduledTask).nextRunAt = '2026-01-15T10:00:00' // 两个任务都立即到期
     ;(good as ScheduledTask).nextRunAt = '2026-01-15T10:00:00'
     svc.tick(new Date('2026-01-15T10:00:01'))
+    // 隔离：'good' 仍被触发，'bad' 的 runner 抛错没阻断后续
     expect(calls).toEqual([good.id])
-    expect(logs.some((l) => l.includes('bad') && l.includes('spawn fail'))).toBe(true)
+    // 修复 finding #9：抛错也写 history，error 携带原始 message
+    const badRec = svc.history.find((r) => r.taskId === bad.id && r.status === 'failed')
+    expect(badRec).toBeDefined()
+    expect(badRec?.error).toContain('spawn fail')
   })
 })
 
@@ -242,3 +270,52 @@ describe('TaskService.load（错过标记）', () => {
 async function settle(): Promise<void> {
   for (let i = 0; i < 5; i++) await Promise.resolve()
 }
+
+describe('finding #2: persist 失败不崩主进程', () => {
+  it('saveTasks 抛错时 fire 不抛，history 仍保留在内存', async () => {
+    const d = deferred()
+    const { svc, persistErrors, logs } = makeService(() => ({ runId: 'r', promise: d.promise, kill: () => undefined }))
+    // 让 saveTasks 抛 EACCES：模拟磁盘不可写（ESM export 是 getter，spyOn 才能覆盖）
+    const origStore = await import('../store/TaskStore')
+    const spy = vi.spyOn(origStore, 'saveTasks').mockImplementation(() => { throw new Error('EACCES') })
+    try {
+      const task = svc.create(input())
+      // create → safePersist('create') 抛错被吞；fire 不冒泡
+      expect(() => svc.runNow(task.id)).not.toThrow()
+      // history 应仍含 running 记录（内存状态没丢）
+      expect(svc.history.some((r) => r.taskId === task.id)).toBe(true)
+      // onPersistError 已被收集
+      expect(persistErrors.length).toBeGreaterThan(0)
+      expect((persistErrors[0] as Error).message).toBe('EACCES')
+      // log 也被记录（label 形如 create / fire-insert / runNow）
+      expect(logs.some((l) => l.includes('persist failed'))).toBe(true)
+    } finally {
+      spy.mockRestore()
+    }
+  })
+})
+
+describe('finding #9: runner 同步抛错写入 history', () => {
+  it('runner 同步抛异常时，history 含 failed 记录且有 error 信息', () => {
+    const d = deferred()
+    const { svc } = makeService((t) => {
+      if (t.name === 'boom') throw new Error('spawn fail sync')
+      return { runId: 'r', promise: d.promise, kill: () => undefined }
+    })
+    const task = svc.create(input({ name: 'boom' }), new Date('2026-01-15T10:00:00'))
+    ;(task as ScheduledTask).nextRunAt = '2026-01-15T10:00:00'
+    svc.tick(new Date('2026-01-15T10:00:01'))
+    const rec = svc.history.find((r) => r.taskId === task.id && r.status === 'failed')
+    expect(rec).toBeDefined()
+    expect(rec?.error).toContain('spawn fail sync')
+  })
+
+  it('runner 返回 null 时 history 含 failed 记录', () => {
+    const { svc } = makeService(() => null)
+    const task = svc.create(input({ name: 'nullish' }))
+    svc.runNow(task.id)
+    const rec = svc.history.find((r) => r.taskId === task.id && r.status === 'failed')
+    expect(rec).toBeDefined()
+    expect(rec?.error).toContain('runner')
+  })
+})
