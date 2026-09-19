@@ -22,6 +22,8 @@ let settingsPath = ''
 let settings = { ...SETTINGS_DEFAULT }
 let tray: TrayWithMenu | null = null
 let trayWin: BrowserWindow | null = null // 托盘当前绑定的窗口；窗口重建后需重绑
+// 修复 finding #15：schedulerTimer 提到模块作用域，before-quit 时清理
+let schedulerTimer: NodeJS.Timeout | null = null
 
 /** 托盘跟随设置与当前窗口：closeToTray 开→绑定最新窗口；关→销毁；每次刷新「退出」标签 */
 function syncTray(): void {
@@ -137,7 +139,7 @@ app.whenReady().then(async () => {
     }
   })
   taskService.load()
-  const schedulerTimer = setInterval(() => taskService.tick(), 30_000)
+  schedulerTimer = setInterval(() => taskService.tick(), 30_000)
   schedulerTimer.unref()
 
   // 自定义应用菜单须在建窗前装好：macOS 默认菜单的 File>Close 会抢占 ⌘W
@@ -147,7 +149,13 @@ app.whenReady().then(async () => {
   createWindow()
 
   // ---- 关闭行为 + 托盘（close 守卫在 createWindow 内挂；托盘由 createWindow 末尾的 syncTray 建立） ----
-  app.on('before-quit', () => { quitting = true })
+  app.on('before-quit', () => {
+    quitting = true
+    if (schedulerTimer) {
+      clearInterval(schedulerTimer)
+      schedulerTimer = null
+    }
+  })
 
   // 扩展扫描的 project 目录取当前活跃会话 cwd（无会话时 home）
   // 修复 finding #7：activeCwd 在活跃会话关闭时回退到 home
