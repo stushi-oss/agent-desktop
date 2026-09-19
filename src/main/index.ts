@@ -150,7 +150,17 @@ app.whenReady().then(async () => {
   app.on('before-quit', () => { quitting = true })
 
   // 扩展扫描的 project 目录取当前活跃会话 cwd（无会话时 home）
+  // 修复 finding #7：activeCwd 在活跃会话关闭时回退到 home
   let activeCwd = homedir()
+  let activeSessionId: string | null = null
+
+  // 订阅 onRemove：被移除的是当前活跃会话则重置
+  sessions.onRemove(({ id }) => {
+    if (id === activeSessionId) {
+      activeCwd = homedir()
+      activeSessionId = null
+    }
+  })
 
   registerIpc({
     getWindow: () => mainWindow,
@@ -158,8 +168,9 @@ app.whenReady().then(async () => {
     tasks: taskService,
     shellFor: () => shell,
     scanRegistry: () => scanRegistry(createNodeScannerFs(), homedir(), activeCwd),
-    onSessionCreated: (cwd: string) => {
+    onSessionCreated: (cwd, sessionId) => {
       activeCwd = cwd
+      activeSessionId = sessionId
     },
     settings: {
       get: () => settings,
@@ -178,8 +189,9 @@ app.whenReady().then(async () => {
   // 避免与 hydrate 抢跑造成重复渲染。
   {
     const initialCwd = homedir()
-    sessions.create(initialCwd, 80, 24, shell, false)
+    const initial = sessions.create(initialCwd, 80, 24, shell, false)
     activeCwd = initialCwd
+    activeSessionId = initial.id
   }
 
   app.on('activate', () => {
