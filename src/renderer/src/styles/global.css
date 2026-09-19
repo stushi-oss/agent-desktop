@@ -123,6 +123,8 @@ input, textarea, select { font: inherit; }
   -webkit-app-region: drag;
 }
 .titlebar > * { -webkit-app-region: no-drag; }
+/* macOS 红绿灯（hiddenInset）占据左侧，为品牌留出空间 */
+.platform-darwin .titlebar { padding-left: 84px; }
 .brand { font-weight: 700; font-size: 13px; color: var(--text-strong); margin-right: 4px; }
 .tabstrip { display: flex; align-items: flex-end; gap: 2px; flex: 1; min-width: 0; overflow-x: auto; }
 .tab {
@@ -130,6 +132,7 @@ input, textarea, select { font: inherit; }
   padding: 5px 8px 6px; border-radius: 6px 6px 0 0; font-size: 12px;
   color: var(--text-dim); border-bottom: 2px solid transparent; white-space: nowrap;
 }
+.tab .label { overflow: hidden; text-overflow: ellipsis; }
 .tab:hover { color: var(--text-strong); background: var(--accent-soft); }
 .tab.active { color: var(--text-strong); border-bottom-color: var(--accent); background: var(--accent-soft); }
 .tab .close-x { visibility: hidden; color: var(--text-dim); font-size: 11px; padding: 0 2px; }

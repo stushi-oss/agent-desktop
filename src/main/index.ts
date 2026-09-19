@@ -9,6 +9,7 @@ import { SessionManager } from './session/SessionManager'
 import { TaskService } from './tasks/TaskService'
 import { scanRegistry, createNodeScannerFs } from './registry/RegistryScanner'
 import { registerIpc, hookAppShortcuts } from './ipc'
+import { installAppMenu } from './menu'
 import { initNotifications, showNotification, setDockBadge } from './notifications'
 import { notifyTexts } from './notifyText'
 
@@ -79,11 +80,19 @@ app.whenReady().then(async () => {
       if (!failed && rec.status !== 'success') return
       if (!failed && !task.notify.onComplete) return
       showNotification(failed ? texts.failed(task.name) : texts.done(task.name), texts.detail, () => {
-        if (mainWindow) {
+        if (!mainWindow || mainWindow.isDestroyed()) {
+          createWindow() // 点击通知时窗口已关：重建并打开任务抽屉
+        } else {
           if (mainWindow.isMinimized()) mainWindow.restore()
           mainWindow.show()
           mainWindow.focus()
-          mainWindow.webContents.send('app:openTasks')
+        }
+        // send 需要在窗口就绪后发；重建路径下 did-finish-load 后再发
+        const w = mainWindow
+        if (w && !w.isDestroyed()) {
+          const send = (): void => { if (!w.isDestroyed()) w.webContents.send('app:openTasks') }
+          if (w.webContents.isLoadingMainFrame()) w.webContents.once('did-finish-load', send)
+          else send()
         }
       })
     }
@@ -91,6 +100,9 @@ app.whenReady().then(async () => {
   taskService.load()
   const schedulerTimer = setInterval(() => taskService.tick(), 30_000)
   schedulerTimer.unref()
+
+  // 自定义应用菜单须在建窗前装好：macOS 默认菜单的 File>Close 会抢占 ⌘W
+  installAppMenu()
 
   // 先建窗口再注册 IPC：registerIpc 里的快捷键转发依赖 getWindow() 非 null
   createWindow()

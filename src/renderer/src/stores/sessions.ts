@@ -36,11 +36,10 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
     set((s) => ({ sessions: s.sessions.map((x) => (x.id === id ? { ...x, alive: false } : x)) })),
   close: async (id) => {
     await window.api.sessions.kill(id)
+    // 关闭后激活相邻 tab（优先左侧），与常见 tab 栏行为一致
+    const idx = get().sessions.findIndex((x) => x.id === id)
     const rest = get().sessions.filter((x) => x.id !== id)
-    set({
-      sessions: rest,
-      activeId:
-        get().activeId === id ? (rest.length > 0 ? rest[rest.length - 1].id : null) : get().activeId
-    })
+    const next = rest[idx - 1] ?? rest[0] ?? null
+    set({ sessions: rest, activeId: get().activeId === id ? next?.id ?? null : get().activeId })
   }
 }))

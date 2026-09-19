@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import './i18n'
-import { effectiveTheme, watchSystemTheme } from '@/theme/theme'
+import { applyTheme, effectiveTheme, watchSystemTheme } from '@/theme/theme'
 import { useModeStore } from '@/theme/modeStore'
 import { useSessionStore } from '@/stores/sessions'
 import { useTaskStore, selectRunningCount } from '@/stores/tasks'
@@ -28,8 +28,14 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
 
   useEffect(() => {
+    // macOS 红绿灯藏在 titlebar 左侧，留出空间避免遮挡品牌
+    if (window.api.app.platform === 'darwin') {
+      document.documentElement.classList.add('platform-darwin')
+    }
     const off = watchSystemTheme(() => {
       if (useModeStore.getState().mode === 'system') {
+        // 先更新 data-theme 再同步 store（store 只驱动终端重渲染，不触发 applyTheme）
+        applyTheme('system')
         useModeStore.setState({ effective: effectiveTheme('system') })
       }
     })

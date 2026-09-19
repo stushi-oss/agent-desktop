@@ -89,8 +89,4 @@ export function registerIpc(deps: IpcDeps): void {
   // 广播转发：类级监听器，注册一次覆盖所有会话
   sessions.onData((ev) => push(deps.getWindow(), CHANNELS.sessionData, ev))
   sessions.onExit((ev) => push(deps.getWindow(), CHANNELS.sessionExit, ev))
-
-  // 首窗快捷键（窗口重建由 createWindow 内重新 hookAppShortcuts）
-  const win = deps.getWindow()
-  if (win) hookAppShortcuts(win)
 }
