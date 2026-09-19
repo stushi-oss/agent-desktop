@@ -60,6 +60,11 @@ export class TaskService {
     saveHistory(this.deps.storeDir, this.history)
   }
 
+  /** Stub：Task 6 替换为完整 try/catch + onPersistError 通知 */
+  private safePersist(_label: string): void {
+    this.persist()
+  }
+
   load(now: Date = new Date()): void {
     const data = loadStore(this.deps.storeDir)
     this.tasks = data.tasks
@@ -133,6 +138,25 @@ export class TaskService {
   }
 
   private fire(t: ScheduledTask, now: Date): void {
+    // 修复 finding #1：claudePath 缺失时直接失败 + 禁用，避免 interval/cron 任务每 tick 重跑
+    if (!this.deps.claudePath) {
+      const failed: RunRecord = {
+        id: newId(),
+        taskId: t.id,
+        startedAt: now.toISOString(),
+        finishedAt: now.toISOString(),
+        status: 'failed',
+        error: 'claude executable not found'
+      }
+      this.history = trimHistory([failed, ...this.history])
+      this.safePersist('fire-claude-missing-insert')
+      t.enabled = false
+      t.nextRunAt = undefined
+      this.safePersist('fire-claude-missing-disable')
+      this.deps.notify?.(failed, t)
+      this.emit()
+      return
+    }
     const ctx: RunContext | null = this.deps.claudePath
       ? { claudePath: this.deps.claudePath, env: this.deps.env, runsDir: this.deps.runsDir }
       : null

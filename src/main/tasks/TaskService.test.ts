@@ -167,6 +167,28 @@ describe('TaskService.tick 触发与防抖', () => {
     expect(rec.error).toContain('claude')
     expect(notified).toHaveLength(1)
   })
+  it('finding #1: claudePath 缺失时 interval 任务不循环 spam', () => {
+    const d = deferred()
+    const calls: string[] = []
+    const { svc, notified } = makeService(() => { calls.push('ran'); return { runId: 'r', promise: d.promise, kill: () => undefined } })
+    ;(svc as unknown as { deps: { claudePath: string | null } }).deps.claudePath = null
+    const task = svc.create(input({ schedule: { type: 'interval', minutes: 5 } }), new Date('2026-01-15T10:00:00'))
+    // 强制立即到期
+    ;(task as ScheduledTask).nextRunAt = '2026-01-15T10:00:00'
+    svc.tick(new Date('2026-01-15T10:00:01'))
+    expect(calls).toEqual([])  // claudePath=null 时不调 runner
+    expect(svc.tasks[0].enabled).toBe(false)  // 立即禁用
+    expect(svc.tasks[0].nextRunAt).toBeUndefined()
+    const failedRec = svc.history.find((r) => r.taskId === task.id && r.status === 'failed')
+    expect(failedRec).toBeDefined()
+    expect(failedRec?.error).toContain('claude')
+    // 第二次 tick：不会重复触发
+    svc.tick(new Date('2026-01-15T10:00:30'))
+    expect(calls).toEqual([])
+    expect(svc.history.filter((r) => r.taskId === task.id && r.status === 'failed')).toHaveLength(1)
+    // 通知只发一次
+    expect(notified).toHaveLength(1)
+  })
   it('runner promise reject → failed 记录（error=异常 message）+ active 清理', async () => {
     let rejectFn!: (e: Error) => void
     const promise = new Promise<RunRecord>((_, rej) => {
