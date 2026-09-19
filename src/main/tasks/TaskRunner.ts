@@ -25,6 +25,25 @@ export interface RunOpts {
   timeoutMs?: number
 }
 
+/**
+ * 修复 finding #10：调度 SIGKILL fallback。
+ * 创建的 timer **不要** `.unref()`——必须保持事件循环活跃直到 SIGKILL 触发或子进程退出。
+ * 如果 child 忽略 SIGTERM 而 outer timer 已 unref，事件循环可能在外层 timer 触发
+ * 与 SIGKILL 触发之间退出，留下 zombie 进程。
+ * 导出此函数以便测试直接验证 timer 行为，绕开 spawn mock。
+ */
+export function scheduleForceKill(
+  child: { kill: (signal?: NodeJS.Signals | number) => boolean; exitCode: number | null; signalCode: NodeJS.Signals | null },
+  getFinished: () => boolean,
+  delayMs = 3000
+): NodeJS.Timeout {
+  return setTimeout(() => {
+    if (!getFinished() && child.exitCode === null && child.signalCode === null) {
+      child.kill('SIGKILL')
+    }
+  }, delayMs)
+}
+
 /** headless 执行一个任务：spawn claude -p、transcript 落盘、超时杀进程 */
 export function startRun(task: ScheduledTask, ctx: RunContext, opts: RunOpts = {}): RunHandle {
   const spawnFn = opts.spawnFn ?? spawn
@@ -107,9 +126,10 @@ export function startRun(task: ScheduledTask, ctx: RunContext, opts: RunOpts = {
     const timer: NodeJS.Timeout = setTimeout(() => {
       timedOut = true
       child.kill('SIGTERM')
-      setTimeout(() => {
-        if (!finished && child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
-      }, 3000).unref()
+      // 修复 finding #10：inner SIGKILL timer 不 .unref()——
+      // 必须保持事件循环活跃直到 SIGKILL 触发或子进程退出。
+      // outer timer 仍 .unref()，启动退出不受阻塞。
+      scheduleForceKill(child, () => finished, 3000)
     }, timeoutMs)
     timer.unref()
   })
