@@ -77,6 +77,32 @@ describe('filterSensitiveEnv', () => {
     expect(out).not.toHaveProperty('anthropic_api_key')
     expect(out.PATH).toBe('/y')
   })
+  it('ANTHROPIC_BASE_URL / ANTHROPIC_MODEL 保留（Bedrock / Vertex 配置）', () => {
+    const out = filterSensitiveEnv({
+      ANTHROPIC_BASE_URL: 'https://bedrock-runtime.us-east-1.amazonaws.com',
+      ANTHROPIC_MODEL: 'us.anthropic.claude-sonnet-4-20250514-v1:0',
+      ANTHROPIC_API_KEY: 'leaked',
+      PATH: '/usr/bin'
+    })
+    expect(out.ANTHROPIC_BASE_URL).toBe('https://bedrock-runtime.us-east-1.amazonaws.com')
+    expect(out.ANTHROPIC_MODEL).toBe('us.anthropic.claude-sonnet-4-20250514-v1:0')
+    expect(out).not.toHaveProperty('ANTHROPIC_API_KEY')
+    expect(out.PATH).toBe('/usr/bin')
+  })
+  it('AWS_REGION / AWS_PROFILE 保留（非 secret）', () => {
+    const out = filterSensitiveEnv({
+      AWS_REGION: 'us-east-1',
+      AWS_PROFILE: 'dev',
+      AWS_ACCESS_KEY_ID: 'AKIA...',
+      AWS_SECRET_ACCESS_KEY: 'secret',
+      HOME: '/home/u'
+    })
+    expect(out.AWS_REGION).toBe('us-east-1')
+    expect(out.AWS_PROFILE).toBe('dev')
+    expect(out).not.toHaveProperty('AWS_ACCESS_KEY_ID')
+    expect(out).not.toHaveProperty('AWS_SECRET_ACCESS_KEY')
+    expect(out.HOME).toBe('/home/u')
+  })
 })
 
 describe('CwdSchema', () => {
