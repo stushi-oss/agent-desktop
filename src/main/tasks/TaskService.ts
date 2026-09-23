@@ -1,9 +1,10 @@
 import { readFileSync } from 'node:fs'
-import type { RunRecord, ScheduledTask, StreamEvent, TaskInput } from '@shared/types'
+import type { RunRecord, ScheduledTask, TaskInput } from '@shared/types'
+import type { NormalizedEvent } from '@shared/streamEvents'
 import { isValidCronExpr } from '@shared/scheduleCheck'
 import { loadStore, newId, saveHistory, saveTasks, trimHistory } from '../store/TaskStore'
 import { isDue, nextRunOf } from './schedule'
-import { parseStreamLine } from './streamJson'
+import { parseEvents } from './streamJson'
 import { startRun, type RunContext, type RunHandle } from './TaskRunner'
 
 export type { RunContext }
@@ -332,13 +333,10 @@ export class TaskService {
     return taskId ? this.history.filter((r) => r.taskId === taskId) : this.history
   }
 
-  readTranscript(rec: RunRecord): StreamEvent[] {
+  readTranscript(rec: RunRecord): NormalizedEvent[] {
     if (!rec.transcriptPath) return []
     try {
-      return readFileSync(rec.transcriptPath, 'utf8')
-        .split('\n')
-        .map((l) => parseStreamLine(l))
-        .filter((ev): ev is StreamEvent => ev !== null)
+      return parseEvents(readFileSync(rec.transcriptPath, 'utf8'))
     } catch {
       return []
     }

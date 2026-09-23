@@ -14,6 +14,7 @@ import { registerIpc, hookAppShortcuts } from './ipc'
 import { installAppMenu } from './menu'
 import { initNotifications, showNotification, setDockBadge } from './notifications'
 import { notifyTexts } from './notifyText'
+import { PUSH_CHANNELS } from '@shared/channels'
 
 let mainWindow: BrowserWindow | null = null
 // close 守卫与托盘跟随每次 createWindow 生效，相关状态提升到模块作用域
@@ -110,7 +111,7 @@ app.whenReady().then(async () => {
     log: (m) => console.log(m),
     onChanged: (tasks, history) => {
       if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('tasks:changed', { tasks, history })
+        mainWindow.webContents.send(PUSH_CHANNELS.tasksChanged, { tasks, history })
       }
       setDockBadge(history.filter((r) => r.status === 'running').length)
     },
@@ -131,7 +132,7 @@ app.whenReady().then(async () => {
         // send 需要在窗口就绪后发；重建路径下 did-finish-load 后再发
         const w = mainWindow
         if (w && !w.isDestroyed()) {
-          const send = (): void => { if (!w.isDestroyed()) w.webContents.send('app:openTasks') }
+          const send = (): void => { if (!w.isDestroyed()) w.webContents.send(PUSH_CHANNELS.appOpenTasks) }
           if (w.webContents.isLoadingMainFrame()) w.webContents.once('did-finish-load', send)
           else send()
         }

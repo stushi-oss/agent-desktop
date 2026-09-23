@@ -3,6 +3,8 @@ import type { SessionManager } from './session/SessionManager'
 import type { TaskService } from './tasks/TaskService'
 import type { ShellChoice } from './shellSelect'
 import type { AppSettings, RegistrySnapshot, RunRecord, SessionSummary, TaskInput } from '@shared/types'
+import { INVOKE_CHANNELS, PUSH_CHANNELS } from '@shared/channels'
+import { AppSettingsPatchSchema } from '@shared/schemas'
 import { toTranscriptItems } from './tasks/streamJson'
 
 export interface IpcDeps {
@@ -23,13 +25,6 @@ export interface IpcDeps {
   claudeStatus: { found: boolean; candidates: string[] }
 }
 
-/** 渲染进程 ← 主进程推送（preload 里包装成 onXxx 订阅） */
-export const CHANNELS = {
-  sessionData: 'session:data',
-  sessionExit: 'session:exit',
-  tasksChanged: 'tasks:changed'
-} as const
-
 function push(win: BrowserWindow | null, channel: string, payload: unknown): void {
   if (win && !win.isDestroyed()) win.webContents.send(channel, payload)
 }
@@ -48,7 +43,7 @@ export function hookAppShortcuts(win: BrowserWindow): void {
     const key = input.key.toLowerCase()
     if (SHORTCUT_KEYS.has(key)) {
       event.preventDefault()
-      push(win, 'app:shortcut', { key })
+      push(win, PUSH_CHANNELS.appShortcut, { key })
     }
   })
 }
@@ -57,22 +52,26 @@ export function hookAppShortcuts(win: BrowserWindow): void {
 export function registerIpc(deps: IpcDeps): void {
   const { sessions, tasks } = deps
 
-  ipcMain.handle('sessions:create', (_e, cwd: string, launchClaude?: boolean): SessionSummary => {
+  ipcMain.handle(INVOKE_CHANNELS.sessions.create, (_e, cwd: string, launchClaude?: boolean): SessionSummary => {
     const summary = sessions.create(cwd, 80, 24, deps.shellFor(cwd), launchClaude ?? false)
     deps.onSessionCreated?.(cwd, summary.id)
+    push(deps.getWindow(), PUSH_CHANNELS.sessionsChanged, undefined)
     return summary
   })
-  ipcMain.handle('sessions:write', (_e, id: string, data: string) => sessions.write(id, data))
-  ipcMain.handle('sessions:resize', (_e, id: string, cols: number, rows: number) =>
+  ipcMain.handle(INVOKE_CHANNELS.sessions.write, (_e, id: string, data: string) => sessions.write(id, data))
+  ipcMain.handle(INVOKE_CHANNELS.sessions.resize, (_e, id: string, cols: number, rows: number) =>
     sessions.resize(id, cols, rows)
   )
-  ipcMain.handle('sessions:kill', (_e, id: string) => sessions.kill(id))
-  ipcMain.handle('sessions:list', () => sessions.list())
-  ipcMain.handle('sessions:rename', (_e, id: string, title: string): boolean =>
+  ipcMain.handle(INVOKE_CHANNELS.sessions.kill, (_e, id: string) => {
+    sessions.kill(id)
+    push(deps.getWindow(), PUSH_CHANNELS.sessionsChanged, undefined)
+  })
+  ipcMain.handle(INVOKE_CHANNELS.sessions.list, () => sessions.list())
+  ipcMain.handle(INVOKE_CHANNELS.sessions.rename, (_e, id: string, title: string): boolean =>
     sessions.rename(id, title)
   )
 
-  ipcMain.handle('app:pickDirectory', async () => {
+  ipcMain.handle(INVOKE_CHANNELS.app.pickDirectory, async () => {
     const win = deps.getWindow()
     if (!win || win.isDestroyed()) return null
     const r = await dialog.showOpenDialog(win, {
@@ -82,31 +81,34 @@ export function registerIpc(deps: IpcDeps): void {
   })
 
   // ---------- 扩展 ----------
-  ipcMain.handle('registry:scan', () => deps.scanRegistry())
+  ipcMain.handle(INVOKE_CHANNELS.registry.scan, () => deps.scanRegistry())
 
   // ---------- 设置 ----------
-  ipcMain.handle('app:getSettings', () => deps.settings.get())
-  ipcMain.handle('app:setSettings', (_e, patch: Partial<AppSettings>) => {
-    const next = deps.settings.set(patch)
-    if (patch.theme) nativeTheme.themeSource = patch.theme
-    push(deps.getWindow(), 'app:settingsChanged', next)
+  ipcMain.handle(INVOKE_CHANNELS.app.getSettings, () => deps.settings.get())
+  ipcMain.handle(INVOKE_CHANNELS.app.setSettings, (_e, patch: unknown): AppSettings => {
+    // zod 严格校验：拒绝非法 theme / locale 长度 / 未知 key
+    // 抛 ZodError → IPC promise reject → renderer console.error
+    const parsed = AppSettingsPatchSchema.parse(patch)
+    const next = deps.settings.set(parsed)
+    if (parsed.theme) nativeTheme.themeSource = parsed.theme
+    push(deps.getWindow(), PUSH_CHANNELS.appSettingsChanged, next)
     return next
   })
-  ipcMain.handle('app:getClaudeStatus', () => deps.claudeStatus)
+  ipcMain.handle(INVOKE_CHANNELS.app.getClaudeStatus, () => deps.claudeStatus)
 
   // ---------- 定时任务 ----------
-  ipcMain.handle('tasks:list', () => tasks.tasks)
-  ipcMain.handle('tasks:history', (_e, taskId?: string) => tasks.historyOf(taskId))
-  ipcMain.handle('tasks:create', (_e, input: TaskInput) => tasks.create(input))
-  ipcMain.handle('tasks:update', (_e, id: string, patch: Parameters<TaskService['update']>[1]) =>
+  ipcMain.handle(INVOKE_CHANNELS.tasks.list, () => tasks.tasks)
+  ipcMain.handle(INVOKE_CHANNELS.tasks.history, (_e, taskId?: string) => tasks.historyOf(taskId))
+  ipcMain.handle(INVOKE_CHANNELS.tasks.create, (_e, input: TaskInput) => tasks.create(input))
+  ipcMain.handle(INVOKE_CHANNELS.tasks.update, (_e, id: string, patch: Parameters<TaskService['update']>[1]) =>
     tasks.update(id, patch)
   )
-  ipcMain.handle('tasks:remove', (_e, id: string) => tasks.remove(id))
-  ipcMain.handle('tasks:setEnabled', (_e, id: string, enabled: boolean) => tasks.setEnabled(id, enabled))
-  ipcMain.handle('tasks:runNow', (_e, id: string) => tasks.runNow(id))
-  ipcMain.handle('tasks:transcript', (_e, rec: RunRecord) => toTranscriptItems(tasks.readTranscript(rec)))
+  ipcMain.handle(INVOKE_CHANNELS.tasks.remove, (_e, id: string) => tasks.remove(id))
+  ipcMain.handle(INVOKE_CHANNELS.tasks.setEnabled, (_e, id: string, enabled: boolean) => tasks.setEnabled(id, enabled))
+  ipcMain.handle(INVOKE_CHANNELS.tasks.runNow, (_e, id: string) => tasks.runNow(id))
+  ipcMain.handle(INVOKE_CHANNELS.tasks.transcript, (_e, rec: RunRecord) => toTranscriptItems(tasks.readTranscript(rec)))
 
   // 广播转发：类级监听器，注册一次覆盖所有会话
-  sessions.onData((ev) => push(deps.getWindow(), CHANNELS.sessionData, ev))
-  sessions.onExit((ev) => push(deps.getWindow(), CHANNELS.sessionExit, ev))
+  sessions.onData((ev) => push(deps.getWindow(), PUSH_CHANNELS.sessionData, ev))
+  sessions.onExit((ev) => push(deps.getWindow(), PUSH_CHANNELS.sessionExit, ev))
 }
