@@ -1,10 +1,12 @@
 import { BrowserWindow, dialog, ipcMain, nativeTheme } from 'electron'
+import { homedir } from 'node:os'
 import type { SessionManager } from './session/SessionManager'
 import type { TaskService } from './tasks/TaskService'
 import type { ShellChoice } from './shellSelect'
-import type { AppSettings, RegistrySnapshot, RunRecord, SessionSummary, TaskInput } from '@shared/types'
+import type { AppSettings, RegistrySnapshot, SessionSummary, TaskInput } from '@shared/types'
 import { INVOKE_CHANNELS, PUSH_CHANNELS } from '@shared/channels'
 import { AppSettingsPatchSchema } from '@shared/schemas'
+import { CwdSchema, TranscriptRequestSchema, assertRealDir, pathWithinParents } from '@shared/security'
 import { toTranscriptItems } from './tasks/streamJson'
 
 export interface IpcDeps {
@@ -52,7 +54,12 @@ export function hookAppShortcuts(win: BrowserWindow): void {
 export function registerIpc(deps: IpcDeps): void {
   const { sessions, tasks } = deps
 
-  ipcMain.handle(INVOKE_CHANNELS.sessions.create, (_e, cwd: string, launchClaude?: boolean): SessionSummary => {
+  ipcMain.handle(INVOKE_CHANNELS.sessions.create, (_e, rawCwd: unknown, launchClaude?: boolean): SessionSummary => {
+    // 修复 #2：renderer-supplied cwd + login shell = rc 文件 RCE
+    // 三重校验：zod 类型 → 真实目录（非 symlink）→ 在 homedir 下
+    const cwd = CwdSchema.parse(rawCwd)
+    assertRealDir(cwd)
+    pathWithinParents(cwd, [homedir()])
     const summary = sessions.create(cwd, 80, 24, deps.shellFor(cwd), launchClaude ?? false)
     deps.onSessionCreated?.(cwd, summary.id)
     push(deps.getWindow(), PUSH_CHANNELS.sessionsChanged, undefined)
@@ -106,7 +113,12 @@ export function registerIpc(deps: IpcDeps): void {
   ipcMain.handle(INVOKE_CHANNELS.tasks.remove, (_e, id: string) => tasks.remove(id))
   ipcMain.handle(INVOKE_CHANNELS.tasks.setEnabled, (_e, id: string, enabled: boolean) => tasks.setEnabled(id, enabled))
   ipcMain.handle(INVOKE_CHANNELS.tasks.runNow, (_e, id: string) => tasks.runNow(id))
-  ipcMain.handle(INVOKE_CHANNELS.tasks.transcript, (_e, rec: RunRecord) => toTranscriptItems(tasks.readTranscript(rec)))
+  ipcMain.handle(INVOKE_CHANNELS.tasks.transcript, (_e, rawReq: unknown) => {
+    // 修复 #1：renderer-supplied transcriptPath → 任意本地文件读
+    // 改成 { taskId, runId }，main 端用 runsDir + id 拼路径，renderer 不可选文件
+    const req = TranscriptRequestSchema.parse(rawReq)
+    return toTranscriptItems(tasks.readTranscriptByRunId(req.taskId, req.runId))
+  })
 
   // 广播转发：类级监听器，注册一次覆盖所有会话
   sessions.onData((ev) => push(deps.getWindow(), PUSH_CHANNELS.sessionData, ev))
