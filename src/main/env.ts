@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { posix as posixPath, win32 as win32Path } from 'node:path'
+import { filterSensitiveEnv } from '@shared/security'
 
 /** 按目标平台选择路径拼接规则（纯函数需与宿主 OS 解耦） */
 function pathFor(platform: NodeJS.Platform) {
@@ -51,7 +52,7 @@ export function probeUserEnv(
           resolve(null)
           return
         }
-        const probed = parseEnvOutput(stdout)
+        const probed = filterSensitiveEnv(parseEnvOutput(stdout))
         resolve(Object.keys(probed).length > 0 ? probed : null)
       }
     )
@@ -65,7 +66,8 @@ export function probeUserEnv(
 /** 合成会话/子进程环境：探测结果优先，回退 GUI 进程环境 */
 export function mergedEnv(base: NodeJS.ProcessEnv, probed: NodeJS.ProcessEnv | null): NodeJS.ProcessEnv {
   if (!probed) return { ...base }
-  return { ...base, ...probed, PATH: probed.PATH ?? base.PATH ?? '' }
+  const safeProbed = filterSensitiveEnv(probed)
+  return { ...base, ...safeProbed, PATH: safeProbed.PATH ?? base.PATH ?? '' }
 }
 
 export function resolveClaudePath(
