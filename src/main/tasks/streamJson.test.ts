@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseStreamLine, parseEvents, extractResultText, toTranscriptItems } from './streamJson'
+import { parseStreamLine, parseEvents, extractResultText, toTranscriptItems, createResultExtractor } from './streamJson'
 
 const LINES = [
   '{"type":"system","subtype":"init","model":"claude-sonnet-5"}',
@@ -121,5 +121,43 @@ describe('toTranscriptItems', () => {
     const events = parseEvents('{"type":"assistant","message":{"role":"assistant","content":[null,{"type":"text","text":"ok"}]}}')
     const items = toTranscriptItems(events)
     expect(items).toEqual([{ kind: 'text', text: 'ok' }])
+  })
+})
+
+describe('createResultExtractor 流式等价 (#14)', () => {
+  const fixtures: string[] = [
+    JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'hello' }] } }),
+    [JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'a' }] } }),
+     JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'b' }] } }),
+     JSON.stringify({ type: 'result', result: 'r' })].join('\n'),
+    JSON.stringify({ type: 'result', result: 'only-result' }),
+    [JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'pre' }] } }),
+     JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 't', name: 'Bash', input: {} }] } }),
+     JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'post' }] } })].join('\n'),
+    'not-json\n' + JSON.stringify({ type: 'result', result: 'x' }),
+    JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'tail-no-result' }] } })
+  ]
+
+  it.each(fixtures)('流式 feed 与批量 extract 输出一致', (raw) => {
+    const events = parseEvents(raw)
+    const ex = createResultExtractor()
+    for (const e of events) ex.feed(e)
+    expect(ex.finish()).toBe(extractResultText(events))
+  })
+
+  it('空输入 finish 返回 undefined', () => {
+    expect(createResultExtractor().finish()).toBeUndefined()
+  })
+
+  it('feed 期间随时 finish 与批量语义一致（中途快照）', () => {
+    const events = parseEvents(
+      JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'first' }] } }) + '\n' +
+      JSON.stringify({ type: 'result', result: 'final' })
+    )
+    const ex = createResultExtractor()
+    ex.feed(events[0])
+    expect(ex.finish()).toBe('first')  // 中途：最后 text run
+    ex.feed(events[1])
+    expect(ex.finish()).toBe('first')  // result 后仍优先 text run（与批量语义一致）
   })
 })

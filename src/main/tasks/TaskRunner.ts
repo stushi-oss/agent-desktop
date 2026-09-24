@@ -2,8 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { createWriteStream, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import type { RunRecord, ScheduledTask } from '@shared/types'
-import type { NormalizedEvent } from '@shared/streamEvents'
-import { extractResultText, parseEvents } from './streamJson'
+import { createResultExtractor, parseEvents } from './streamJson'
 import { newId } from '../store/TaskStore'
 
 export interface RunContext {
@@ -50,7 +49,9 @@ export function startRun(task: ScheduledTask, ctx: RunContext, opts: RunOpts = {
   const spawnFn = opts.spawnFn ?? spawn
   const runId = newId()
   const startedAt = new Date().toISOString()
-  const events: NormalizedEvent[] = []
+  // 修复 #14：逐事件 feed O(1) 滚动状态，替代全程累积 events 数组
+  // （小时级 agent run 内存随事件数线性增长，且与磁盘 transcript 重复）
+  const extractor = createResultExtractor()
   let finished = false
   let timedOut = false
 
@@ -93,8 +94,8 @@ export function startRun(task: ScheduledTask, ctx: RunContext, opts: RunOpts = {
       while ((idx = buffer.indexOf('\n')) >= 0) {
         const line = buffer.slice(0, idx)
         buffer = buffer.slice(idx + 1)
-        // parseEvents 处理单行 raw 时返回 0 或 1 个 event；spread 累加到 events
-        events.push(...parseEvents(line))
+        // parseEvents 处理单行 raw 时返回 0 或 1 个 event；逐事件 feed 进 reducer
+        for (const e of parseEvents(line)) extractor.feed(e)
       }
     })
     child.stderr?.setEncoding('utf8')
@@ -108,16 +109,16 @@ export function startRun(task: ScheduledTask, ctx: RunContext, opts: RunOpts = {
     })
 
     child.on('close', (code) => {
-      // flush 未换行结尾的末行，否则 transcript 有它但 extractResultText 拿不到
+      // flush 未换行结尾的末行，否则 transcript 有它但 result 提取拿不到
       if (buffer.trim()) {
-        events.push(...parseEvents(buffer))
+        for (const e of parseEvents(buffer)) extractor.feed(e)
         buffer = ''
       }
       settle({
         id: runId, taskId: task.id, startedAt, finishedAt: new Date().toISOString(),
         status: code === 0 ? 'success' : 'failed',
         exitCode: code ?? undefined,
-        resultText: extractResultText(events),
+        resultText: extractor.finish(),
         error: timedOut ? `timeout after ${timeoutMs}ms` : undefined,
         transcriptPath
       })
