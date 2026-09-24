@@ -264,6 +264,27 @@ describe('TaskService.load（错过标记）', () => {
     rebooted.tick(new Date('2026-01-15T10:00:30'))
     expect(calls).toHaveLength(0)
   })
+  it('load：missed push 到尾部破坏降序后一次性排序恢复（#13）', () => {
+    const { svc: seed } = makeService()
+    const task = seed.create(input(), new Date('2026-01-15T08:00:00'))
+    const { svc } = makeService()
+    svc.tasks = JSON.parse(JSON.stringify(seed.tasks)) as ScheduledTask[]
+    ;(svc.tasks[0] as ScheduledTask).nextRunAt = '2026-01-15T09:00:00'
+    // 磁盘 history 本身降序；missed(09:00) push 到尾部后变乱序 [10:00, 08:30, 09:00]
+    svc.history = [
+      { id: 'h-new', taskId: task.id, startedAt: '2026-01-15T10:00:00', status: 'success' },
+      { id: 'h-old', taskId: task.id, startedAt: '2026-01-15T08:30:00', status: 'success' }
+    ]
+    svc.persist()
+    const rebooted = new TaskService({ storeDir, runsDir, claudePath: '/fake/claude', env: {} })
+    rebooted.load(new Date('2026-01-15T11:00:00'))
+    // missed(09:00) 应落回 10:00 与 08:30 之间，整条 history 严格降序
+    expect(rebooted.history.map((r) => r.startedAt)).toEqual([
+      '2026-01-15T10:00:00',
+      '2026-01-15T09:00:00',
+      '2026-01-15T08:30:00'
+    ])
+  })
 })
 
 // 微任务沉淀：让 fire() 里 handle.promise.then 链跑完

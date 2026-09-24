@@ -34,8 +34,14 @@ export function saveHistory(storeDir: string, history: RunRecord[]): void {
   writeAtomic(join(storeDir, 'history.json'), trimHistory(history))
 }
 
+/** 运行时 trim：调用方保证降序不变式（fire prepend / finishRun 原位替换） */
 export function trimHistory(history: RunRecord[], cap = HISTORY_CAP): RunRecord[] {
-  return [...history].sort((a, b) => b.startedAt.localeCompare(a.startedAt)).slice(0, cap)
+  return history.slice(0, cap)
+}
+
+/** load 路径专用：磁盘数据 + missed push 不保证有序，先排降序再 trim */
+export function sortHistoryDesc(history: RunRecord[]): RunRecord[] {
+  return [...history].sort((a, b) => b.startedAt.localeCompare(a.startedAt))
 }
 
 export function newId(): string {
