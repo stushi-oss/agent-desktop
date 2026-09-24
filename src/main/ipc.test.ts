@@ -23,7 +23,7 @@ vi.mock('electron', () => ({
   nativeTheme: { themeSource: 'system' }
 }))
 
-import { registerIpc, type IpcDeps } from './ipc'
+import { registerIpc, _resetBootstrapForTests, type IpcDeps } from './ipc'
 
 function makeDeps(over: Partial<IpcDeps> = {}): IpcDeps {
   const sessions = {
@@ -75,6 +75,8 @@ function makeDeps(over: Partial<IpcDeps> = {}): IpcDeps {
 
 beforeEach(() => {
   handlers.map = {}
+  // 修复 #6：每个测试前重置 bootstrap 状态，否则第一个测试后 create 被永久 disable
+  _resetBootstrapForTests()
 })
 
 describe('registerIpc security', () => {
@@ -127,5 +129,55 @@ describe('registerIpc security', () => {
     registerIpc(makeDeps())
     const handler = handlers.map['tasks:transcript']
     expect(() => handler({}, { taskId: 'x', runId: 'y' })).toThrow()
+  })
+})
+
+describe('app:sessionsReady handshake', () => {
+  function makeSessionsWithCreate(create: ReturnType<typeof vi.fn>): IpcDeps['sessions'] {
+    return {
+      create,
+      write: vi.fn(),
+      resize: vi.fn(),
+      kill: vi.fn(),
+      list: vi.fn(() => []),
+      rename: vi.fn(() => true),
+      onData: vi.fn(),
+      onExit: vi.fn(),
+      onRemove: vi.fn()
+    } as unknown as IpcDeps['sessions']
+  }
+
+  it('第一次调用创建 session 并返回 true', () => {
+    const { homedir } = require('node:os') as typeof import('node:os')
+    const sessionsCreate = vi.fn((cwd: string) => ({
+      id: 's1',
+      cwd,
+      title: 't',
+      shellCommand: '/bin/zsh',
+      createdAt: '',
+      alive: true
+    }))
+    const deps = makeDeps({ sessions: makeSessionsWithCreate(sessionsCreate) })
+    registerIpc(deps)
+    const handler = handlers.map['app:sessionsReady']
+    expect(handler({})).toBe(true)
+    expect(sessionsCreate).toHaveBeenCalledWith(homedir(), 80, 24, expect.objectContaining({ file: '/bin/zsh' }), false)
+  })
+
+  it('第二次调用返回 false（已 bootstrap）', () => {
+    const sessionsCreate = vi.fn((cwd: string) => ({
+      id: 's1',
+      cwd,
+      title: 't',
+      shellCommand: '/bin/zsh',
+      createdAt: '',
+      alive: true
+    }))
+    const deps = makeDeps({ sessions: makeSessionsWithCreate(sessionsCreate) })
+    registerIpc(deps)
+    const handler = handlers.map['app:sessionsReady']
+    handler({})
+    expect(handler({})).toBe(false)
+    expect(sessionsCreate).toHaveBeenCalledTimes(1)
   })
 })

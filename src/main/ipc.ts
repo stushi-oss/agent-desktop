@@ -31,6 +31,16 @@ function push(win: BrowserWindow | null, channel: string, payload: unknown): voi
   if (win && !win.isDestroyed()) win.webContents.send(channel, payload)
 }
 
+// 修复 #6：bootstrap session 由 renderer hydrate() 后通过 app:sessionsReady 触发。
+// 之前 main 启动立即 create + spawn pty，renderer 无 listener 时 IPC 不重放 → 丢 banner/prompt。
+// 第二次调用返回 false（幂等），防止 hydrate 重入或 reload 重复创建。
+let bootstrapDone = false
+
+/** 重置 bootstrapDone — 仅供测试用 */
+export function _resetBootstrapForTests(): void {
+  bootstrapDone = false
+}
+
 // 应用级快捷键：⌘/Ctrl+T 新会话、⌘/Ctrl+W 关会话、⌘/Ctrl+1-9 切换
 // before-input-event 拦截，避免 macOS 默认菜单把 ⌘W 变成关窗口。
 // 独立导出：窗口重建（macOS activate）后由 createWindow 重新挂载。
@@ -102,6 +112,18 @@ export function registerIpc(deps: IpcDeps): void {
     return next
   })
   ipcMain.handle(INVOKE_CHANNELS.app.getClaudeStatus, () => deps.claudeStatus)
+
+  // 修复 #6：bootstrap handshake —— renderer hydrate() 后调一次，main 才创建 home session
+  ipcMain.handle(INVOKE_CHANNELS.app.sessionsReady, (): boolean => {
+    if (bootstrapDone) return false
+    bootstrapDone = true
+    const initialCwd = homedir()
+    const initial = sessions.create(initialCwd, 80, 24, deps.shellFor(initialCwd), false)
+    deps.onSessionCreated?.(initialCwd, initial.id)
+    push(deps.getWindow(), PUSH_CHANNELS.sessionsChanged, undefined)
+    push(deps.getWindow(), PUSH_CHANNELS.sessionCreated, initial)
+    return true
+  })
 
   // ---------- 定时任务 ----------
   ipcMain.handle(INVOKE_CHANNELS.tasks.list, () => tasks.tasks)

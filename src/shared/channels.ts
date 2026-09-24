@@ -14,7 +14,8 @@ export const INVOKE_CHANNELS = {
     pickDirectory: 'app:pickDirectory',
     getSettings: 'app:getSettings',
     setSettings: 'app:setSettings',
-    getClaudeStatus: 'app:getClaudeStatus'
+    getClaudeStatus: 'app:getClaudeStatus',
+    sessionsReady: 'app:sessionsReady'
   },
   registry: { scan: 'registry:scan' },
   tasks: {
@@ -37,5 +38,6 @@ export const PUSH_CHANNELS = {
   appShortcut: 'app:shortcut',
   appSettingsChanged: 'app:settingsChanged',
   appOpenTasks: 'app:openTasks',
-  sessionsChanged: 'sessions:changed'
+  sessionsChanged: 'sessions:changed',
+  sessionCreated: 'session:created'
 } as const
