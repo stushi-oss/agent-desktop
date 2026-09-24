@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { dirname } from 'node:path'
+import { existsSync, readFileSync } from 'node:fs'
+import { writeAtomic } from './fileStore'
 import type { AppSettings } from '@shared/types'
 
 export const SETTINGS_DEFAULT: AppSettings = { theme: 'system', locale: 'system', closeToTray: false }
@@ -20,8 +20,7 @@ export function loadSettings(path: string): AppSettings {
 
 export function saveSettings(path: string, patch: Partial<AppSettings>): void {
   const merged = { ...loadSettings(path), ...patch }
-  mkdirSync(dirname(path), { recursive: true })
-  writeFileSync(path, JSON.stringify(merged, null, 2), 'utf8')
+  writeAtomic(path, merged)
 }
 
 /** 'system' 时跟随应用 locale（近似系统语言） */
