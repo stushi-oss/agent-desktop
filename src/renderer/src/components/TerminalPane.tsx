@@ -50,24 +50,42 @@ export function TerminalPane({ session, active, themeMode }: Props) {
     term.onData((d) => window.api.sessions.write(session.id, d))
     termRef.current = term
     fitRef.current = fit
+    let lastCols = -1
+    let lastRows = -1
+    let rafId: number | null = null
+
     const syncSize = () => {
+      rafId = null
       try {
         fit.fit()
-        void window.api.sessions.resize(session.id, term.cols, term.rows)
       } catch {
-        /* host 不可见时 fit 会抛错，忽略 */
+        return // host 不可见时 fit 会抛错，忽略
+      }
+      // 尺寸未变（布局微动）不发 IPC
+      if (term.cols !== lastCols || term.rows !== lastRows) {
+        lastCols = term.cols
+        lastRows = term.rows
+        void window.api.sessions.resize(session.id, term.cols, term.rows)
       }
     }
+
+    // rAF 合帧：同一帧内多次 RO 回调只触发一次 syncSize
+    const scheduleSync = () => {
+      if (rafId !== null) return
+      rafId = requestAnimationFrame(syncSize)
+    }
+
     // 多阶段 fit：rAF 一次 + 100ms 后再 fit 一次 + 500ms 后保险一次
     // 处理 StrictMode 双挂载 + 主进程 IPC hydrate 之前的初始尺寸塌陷
-    requestAnimationFrame(syncSize)
-    const t100 = setTimeout(syncSize, 100)
-    const t500 = setTimeout(syncSize, 500)
+    scheduleSync()
+    const t100 = setTimeout(scheduleSync, 100)
+    const t500 = setTimeout(scheduleSync, 500)
     const ro = new ResizeObserver(() => {
-      if (hostRef.current?.offsetParent !== null) syncSize()
+      if (hostRef.current?.offsetParent !== null) scheduleSync()
     })
     ro.observe(hostRef.current!)
     return () => {
+      if (rafId !== null) cancelAnimationFrame(rafId)
       clearTimeout(t100)
       clearTimeout(t500)
       ro.disconnect()
