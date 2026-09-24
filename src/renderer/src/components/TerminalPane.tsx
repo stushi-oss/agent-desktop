@@ -5,6 +5,7 @@ import '@xterm/xterm/css/xterm.css'
 import type { SessionSummary } from '@shared/types'
 import { effectiveTheme } from '@/theme/theme'
 import { xtermThemeFor } from '@/theme/xtermThemes'
+import { registerTerminal } from '@/sessionDataBus'
 
 interface Props {
   session: SessionSummary
@@ -45,9 +46,7 @@ export function TerminalPane({ session, active, themeMode }: Props) {
       }
       return true
     })
-    const offData = window.api.onSessionData((ev) => {
-      if (ev.id === session.id) term.write(ev.data)
-    })
+    const offBus = registerTerminal(session.id, (d) => term.write(d))
     term.onData((d) => window.api.sessions.write(session.id, d))
     termRef.current = term
     fitRef.current = fit
@@ -72,7 +71,7 @@ export function TerminalPane({ session, active, themeMode }: Props) {
       clearTimeout(t100)
       clearTimeout(t500)
       ro.disconnect()
-      offData()
+      offBus()
       term.dispose()
       termRef.current = null
     }
