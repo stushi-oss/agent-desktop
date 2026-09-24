@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { buildProbeCommand, claudeCandidates, mergedEnv, parseEnvOutput, resolveClaudePath } from './env'
+import { filterSensitiveEnv } from '@shared/security'
 
 describe('buildProbeCommand', () => {
   it('darwin 返回登录 shell -l -i -c env', () => {
@@ -84,5 +85,41 @@ describe('claudeCandidates', () => {
   it('PATH 重复目录及与 home 重复的候选去重', () => {
     const list = claudeCandidates({ HOME: '/Users/u', PATH: '/Users/u/.local/bin:/usr/bin:/usr/bin' }, 'darwin')
     expect(list).toEqual(['/Users/u/.local/bin/claude', '/usr/bin/claude'])
+  })
+})
+
+describe('probeUserEnv + filterSensitiveEnv', () => {
+  it('probeUserEnv 输出应被 filterSensitiveEnv 过滤 ANTHROPIC_* secrets', () => {
+    // 直接对 filterSensitiveEnv 行为断言——它就是 probeUserEnv 用来清洗 stdout 解析结果的工具。
+    // 实际集成（spawn login shell → parseEnvOutput → filterSensitiveEnv）见 probeUserEnv 异步路径。
+    const rawProbe = { ANTHROPIC_API_KEY: 'sk-...', PATH: '/usr/bin', HOME: '/home/u' }
+    const filtered = filterSensitiveEnv(rawProbe)
+    expect(filtered).not.toHaveProperty('ANTHROPIC_API_KEY')
+    expect(filtered.PATH).toBe('/usr/bin')
+    expect(filtered.HOME).toBe('/home/u')
+  })
+})
+
+describe('mergedEnv + filterSensitiveEnv', () => {
+  it('mergedEnv 不暴露 probed 的敏感 env vars', () => {
+    const probed = { ANTHROPIC_API_KEY: 'leaked', AWS_SECRET_KEY: 'k', LANG: 'en' }
+    const result = mergedEnv({ LANG: 'xx' }, probed)
+    expect(result).not.toHaveProperty('ANTHROPIC_API_KEY')
+    expect(result).not.toHaveProperty('AWS_SECRET_KEY')
+    expect(result.LANG).toBe('en')  // probed 覆盖 base，但非敏感
+  })
+
+  it('mergedEnv 无 probed 时返回 base', () => {
+    expect(mergedEnv({ X: 'y' }, null)).toEqual({ X: 'y' })
+  })
+
+  it('mergedEnv 仍正确合成 PATH（probed 优先，回退 base）', () => {
+    const merged = mergedEnv(
+      { PATH: '/usr/bin', HOME: '/Users/u' },
+      { PATH: '/opt/homebrew/bin', ANTHROPIC_API_KEY: 'leak' }
+    )
+    expect(merged.PATH).toBe('/opt/homebrew/bin')
+    expect(merged.HOME).toBe('/Users/u')
+    expect(merged).not.toHaveProperty('ANTHROPIC_API_KEY')
   })
 })

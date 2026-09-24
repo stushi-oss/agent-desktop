@@ -59,7 +59,8 @@ const api = {
     remove: (id: string): Promise<boolean> => ipcRenderer.invoke(INVOKE_CHANNELS.tasks.remove, id),
     setEnabled: (id: string, enabled: boolean): Promise<void> => ipcRenderer.invoke(INVOKE_CHANNELS.tasks.setEnabled, id, enabled),
     runNow: (id: string): Promise<void> => ipcRenderer.invoke(INVOKE_CHANNELS.tasks.runNow, id),
-    transcript: (rec: RunRecord): Promise<TranscriptItem[]> => ipcRenderer.invoke(INVOKE_CHANNELS.tasks.transcript, rec)
+    transcript: (req: { taskId: string; runId: string }): Promise<TranscriptItem[]> =>
+      ipcRenderer.invoke(INVOKE_CHANNELS.tasks.transcript, req)
   },
   onTasksChanged: (cb: (payload: { tasks: ScheduledTask[]; history: RunRecord[] }) => void): (() => void) => {
     const listener = (_e: IpcRendererEvent, payload: { tasks: ScheduledTask[]; history: RunRecord[] }) => cb(payload)

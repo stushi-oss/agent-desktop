@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { parseFrontmatter } from './frontmatter'
@@ -86,5 +86,66 @@ describe('scanRegistry', () => {
     write(home, '.claude/skills/bare/SKILL.md', 'just body')
     const snap = scanRegistry(createNodeScannerFs(), home, project)
     expect(snap.skills).toEqual([{ name: 'bare', description: '', source: 'user' }])
+  })
+
+  it('symlink 目录下的 SKILL.md 不被扫描（plugin cache 攻击面防护）', () => {
+    // 攻击场景：恶意插件在 ~/.claude/plugins/cache 下放 symlink 引诱 scanner
+    // 读 attacker-controlled 文件 → Extensions 一键插入 shell
+    write(home, '.claude/skills/real-skill/SKILL.md',
+      '---\nname: real-skill\ndescription: from real dir\n---\n')
+
+    // 把 attacker-controlled 真实目录放在 home 之外（不是 home 子树），用 symlink 引诱进去
+    const attackerDir = mkdtempSync(join(tmpdir(), 'attacker-'))
+    mkdirSync(join(attackerDir, 'evil-skill'), { recursive: true })
+    writeFileSync(join(attackerDir, 'evil-skill', 'SKILL.md'),
+      '---\nname: evil-skill\ndescription: from symlink target\n---\n', 'utf8')
+
+    // 在 ~/.claude/skills 下放置 symlink → attacker dir
+    const linkPath = join(home, '.claude', 'skills', 'evil-link')
+    mkdirSync(join(home, '.claude', 'skills'), { recursive: true })
+    symlinkSync(attackerDir, linkPath)
+
+    const snap = scanRegistry(createNodeScannerFs(), home, project)
+    expect(snap.skills.map(s => s.name)).toEqual(['real-skill'])
+    // 关键断言：通过 symlink 引入的 skill 一定不能出现
+    expect(snap.skills.find(s => s.name === 'evil-skill')).toBeUndefined()
+  })
+
+  it('plugins/cache 下 symlink 子目录不被 walk 进去', () => {
+    // 攻击场景：~/.claude/plugins/cache/official/evil → /tmp/attacker
+    write(home, '.claude/plugins/cache/official/good/1.0/skills/good-skill/SKILL.md',
+      '---\nname: good-skill\ndescription: legitimate\n---\n')
+
+    const attackerDir = mkdtempSync(join(tmpdir(), 'attacker-'))
+    mkdirSync(join(attackerDir, 'skills', 'evil-skill'), { recursive: true })
+    writeFileSync(join(attackerDir, 'skills', 'evil-skill', 'SKILL.md'),
+      '---\nname: evil-skill\ndescription: smuggled\n---\n', 'utf8')
+
+    // 在 plugins/cache 下放 symlink 引诱 walk 进去
+    const linkPath = join(home, '.claude', 'plugins', 'cache', 'official', 'evil')
+    mkdirSync(join(home, '.claude', 'plugins', 'cache', 'official'), { recursive: true })
+    symlinkSync(attackerDir, linkPath)
+
+    const snap = scanRegistry(createNodeScannerFs(), home, project)
+    expect(snap.skills.map(s => s.name)).toEqual(['good-skill'])
+    expect(snap.skills.find(s => s.name === 'evil-skill')).toBeUndefined()
+  })
+
+  it('agents 目录下的 symlink .md 文件不被读取', () => {
+    // 攻击场景：~/.claude/agents/researcher.md → /tmp/attacker/agent.md
+    write(home, '.claude/agents/legit.md',
+      '---\nname: legit\ndescription: real agent\n---\n')
+
+    const attackerDir = mkdtempSync(join(tmpdir(), 'attacker-'))
+    writeFileSync(join(attackerDir, 'agent.md'),
+      '---\nname: evil-agent\ndescription: smuggled\n---\n', 'utf8')
+
+    const linkPath = join(home, '.claude', 'agents', 'evil.md')
+    mkdirSync(join(home, '.claude', 'agents'), { recursive: true })
+    symlinkSync(join(attackerDir, 'agent.md'), linkPath)
+
+    const snap = scanRegistry(createNodeScannerFs(), home, project)
+    expect(snap.agents.map(a => a.name).sort()).toEqual(['legit'])
+    expect(snap.agents.find(a => a.name === 'evil-agent')).toBeUndefined()
   })
 })

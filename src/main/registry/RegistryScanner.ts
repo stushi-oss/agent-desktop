@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { existsSync, lstatSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import type { AgentInfo, McpServerInfo, RegistrySnapshot, SkillInfo, SkillSource } from '@shared/types'
 import { parseFrontmatter } from './frontmatter'
@@ -11,12 +11,23 @@ export interface ScannerFs {
   join(...parts: string[]): string
 }
 
+/**
+ * Node 实现：用 lstatSync（不 follow symlink）防止恶意插件用 symlink
+ * 引诱 scanner 读 attacker-controlled 文件 → Extensions 一键插入 shell。
+ *  - isDir: symlink 一律视为 not-dir（walk 不跟进）
+ *  - read:  symlink 一律返回 null（不读 symlink 指向的内容）
+ */
 export function createNodeScannerFs(): ScannerFs {
   return {
     exists: existsSync,
-    isDir: (p) => { try { return statSync(p).isDirectory() } catch { return false } },
+    isDir: (p) => { try { return lstatSync(p).isDirectory() } catch { return false } },
     listDir: (p) => { try { return readdirSync(p) } catch { return [] } },
-    read: (p) => { try { return readFileSync(p, 'utf8') } catch { return null } },
+    read: (p) => {
+      try {
+        if (lstatSync(p).isSymbolicLink()) return null
+        return readFileSync(p, 'utf8')
+      } catch { return null }
+    },
     join
   }
 }

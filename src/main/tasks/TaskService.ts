@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import type { RunRecord, ScheduledTask, TaskInput } from '@shared/types'
 import type { NormalizedEvent } from '@shared/streamEvents'
 import { isValidCronExpr } from '@shared/scheduleCheck'
@@ -340,5 +341,14 @@ export class TaskService {
     } catch {
       return []
     }
+  }
+
+  /**
+   * 修复 #1：基于 runId 而非 renderer-supplied path 读取 transcript。
+   * main 端用 runsDir + taskId + runId 重新拼路径，renderer 不能选文件。
+   */
+  readTranscriptByRunId(taskId: string, runId: string): NormalizedEvent[] {
+    const path = join(this.deps.runsDir, taskId, `${runId}.jsonl`)
+    return this.readTranscript({ transcriptPath: path } as RunRecord)
   }
 }

@@ -17,11 +17,12 @@ export function TranscriptView({ run, taskId, onClose }: Props) {
 
   useEffect(() => {
     let cancelled = false
-    void window.api.tasks.transcript(run)
+    // 修复 #1：不再传 renderer-supplied transcriptPath；用 runId 让 main 端拼路径
+    void window.api.tasks.transcript({ taskId: run.taskId, runId: run.id })
       .then((list) => { if (!cancelled) setItems(list) })
       .catch(() => { if (!cancelled) setItems([]) })
     return () => { cancelled = true }
-  }, [run])
+  }, [run.id, run.taskId])
 
   return (
     <Modal title={t('transcript.title')} onClose={onClose} width={560}>
