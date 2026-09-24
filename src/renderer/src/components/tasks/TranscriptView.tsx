@@ -3,26 +3,52 @@ import { useTranslation } from 'react-i18next'
 import type { RunRecord, TranscriptItem } from '@shared/types'
 import { useTaskStore } from '@/stores/tasks'
 import { Modal } from '@/components/ui/Modal'
+import { ErrorKind, ERROR_MESSAGES } from '@shared/errors'
+
+type ViewState = 'loading' | 'loaded' | 'empty' | 'error'
 
 interface Props {
   run: RunRecord
-  taskId: string
   onClose: () => void
 }
 
-export function TranscriptView({ run, taskId, onClose }: Props) {
+/** 渲染端 locale 检测：zh-* → 'zh'，否则 'en'。匹配 ERROR_MESSAGES 的键 */
+function pickLocale(): 'en' | 'zh' {
+  try {
+    const lang = (typeof navigator !== 'undefined' && navigator.language) || 'en'
+    return lang.toLowerCase().startsWith('zh') ? 'zh' : 'en'
+  } catch {
+    return 'en'
+  }
+}
+
+export function TranscriptView({ run, onClose }: Props) {
   const { t } = useTranslation()
-  const task = useTaskStore((s) => s.tasks.find((x) => x.id === taskId))
-  const [items, setItems] = useState<TranscriptItem[] | null>(null)
+  const task = useTaskStore((s) => s.tasks.find((x) => x.id === run.taskId))
+  const [items, setItems] = useState<TranscriptItem[]>([])
+  const [viewState, setViewState] = useState<ViewState>('loading')
+  const [errorMsg, setErrorMsg] = useState<string>('')
+  const locale = pickLocale()
 
   useEffect(() => {
     let cancelled = false
+    setViewState('loading')
     // 修复 #1：不再传 renderer-supplied transcriptPath；用 runId 让 main 端拼路径
-    void window.api.tasks.transcript({ taskId: run.taskId, runId: run.id })
-      .then((list) => { if (!cancelled) setItems(list) })
-      .catch(() => { if (!cancelled) setItems([]) })
+    window.api.tasks.transcript({ taskId: run.taskId, runId: run.id })
+      .then((list) => {
+        if (cancelled) return
+        setItems(list)
+        setViewState(list.length === 0 ? 'empty' : 'loaded')
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return
+        setErrorMsg(err instanceof Error ? err.message : String(err))
+        setViewState('error')
+      })
     return () => { cancelled = true }
-  }, [run.id, run.taskId])
+  }, [run.taskId, run.id])
+
+  const errorTitle = ERROR_MESSAGES[ErrorKind.TranscriptLoadFailed][locale]
 
   return (
     <Modal title={t('transcript.title')} onClose={onClose} width={560}>
@@ -32,9 +58,19 @@ export function TranscriptView({ run, taskId, onClose }: Props) {
           {task.prompt}
         </div>
       )}
-      {items === null && <p style={{ color: 'var(--text-dim)' }}>…</p>}
-      {items !== null && items.length === 0 && <p style={{ color: 'var(--text-dim)' }}>{t('transcript.empty')}</p>}
-      {items !== null && items.length > 0 && (
+      {viewState === 'loading' && (
+        <p style={{ color: 'var(--text-dim)' }}>Loading transcript...</p>
+      )}
+      {viewState === 'error' && (
+        <div className="transcript-error" role="alert" style={{ color: 'var(--danger, #c00)' }}>
+          <strong>{errorTitle}</strong>
+          <p style={{ marginTop: 4 }}>{errorMsg}</p>
+        </div>
+      )}
+      {viewState === 'empty' && (
+        <p style={{ color: 'var(--text-dim)' }}>{t('transcript.empty')}</p>
+      )}
+      {viewState === 'loaded' && (
         <div className="transcript">
           {items.map((item, i) => {
             if (item.kind === 'text') {

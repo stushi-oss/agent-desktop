@@ -319,3 +319,41 @@ describe('finding #9: runner 同步抛错写入 history', () => {
     expect(rec?.error).toContain('runner')
   })
 })
+
+describe('finding #5: remove() cancels in-flight runner', () => {
+  it('remove 取消 active handle 不 notify', async () => {
+    const d = deferred()
+    const calls: string[] = []
+    const { svc, notified } = makeService((t) => {
+      calls.push(t.id)
+      return { runId: 'r', promise: d.promise, kill: () => { calls.push('kill') } }
+    })
+    const task = svc.create(input())
+    svc.runNow(task.id)
+    expect(svc.isRunning(task.id)).toBe(true)
+
+    // 用户删除任务
+    expect(svc.remove(task.id)).toBe(true)
+    expect(calls).toContain('kill')
+
+    // 模拟 runner 完成（finishRun 触发）
+    d.resolve({ id: 'r', status: 'success' })
+    await settle()
+
+    // 没有通知（cancelled）
+    expect(notified).toHaveLength(0)
+    // 但 history 仍有记录
+    expect(svc.history.some((r) => r.taskId === task.id)).toBe(true)
+  })
+
+  it('非 cancelled 任务正常 notify', async () => {
+    const d = deferred()
+    const { svc, notified } = makeService(() => ({ runId: 'r', promise: d.promise, kill: () => undefined }))
+    const task = svc.create(input())
+    svc.runNow(task.id)
+    // 不删除，直接完成
+    d.resolve({ id: 'r', status: 'success' })
+    await settle()
+    expect(notified.length).toBeGreaterThan(0)
+  })
+})

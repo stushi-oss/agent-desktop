@@ -7,6 +7,7 @@ import { loadStore, newId, saveHistory, saveTasks, trimHistory } from '../store/
 import { isDue, nextRunOf } from './schedule'
 import { parseEvents } from './streamJson'
 import { startRun, type RunContext, type RunHandle } from './TaskRunner'
+import { cancelTask, clearCancelled, isCancelled } from '../lifecycle/taskLifecycle'
 
 export type { RunContext }
 export type StartRunFn = (task: ScheduledTask, ctx: RunContext) => RunHandle | null
@@ -231,12 +232,16 @@ export class TaskService {
     const merged: RunRecord = { ...running, ...final, id: running.id, taskId: t.id }
     this.history = trimHistory(this.history.map((r) => (r.id === running.id ? merged : r)))
     this.safePersist('finish-run-history')
-    if (t.schedule.type === 'once') {
-      t.enabled = false
-      t.nextRunAt = undefined
+    // 修复 #5：cancelled 任务不通知、不修改任务状态（孤儿 RunRecord 仍保留在 history）
+    if (!isCancelled(t.id)) {
+      if (t.schedule.type === 'once') {
+        t.enabled = false
+        t.nextRunAt = undefined
+      }
+      this.safePersist('finish-run-tasks')
+      this.deps.notify?.(merged, t)
     }
-    this.safePersist('finish-run-tasks')
-    this.deps.notify?.(merged, t)
+    clearCancelled(t.id)
     this.emit()
   }
 
@@ -308,7 +313,16 @@ export class TaskService {
 
   remove(id: string): boolean {
     const before = this.tasks.length
-    this.tasks = this.tasks.filter((t) => t.id !== id)
+    const t = this.tasks.find((x) => x.id === id)
+    if (!t) return false
+    // 修复 #5：标记 cancelled + 取消 active runner，防止 fire() 注册的 .then/.catch 链再触发通知
+    cancelTask(id)
+    const handle = this.active.get(id)
+    if (handle) {
+      handle.kill()
+      this.active.delete(id)
+    }
+    this.tasks = this.tasks.filter((x) => x.id !== id)
     if (this.tasks.length === before) return false
     this.safePersist('remove')
     this.emit()

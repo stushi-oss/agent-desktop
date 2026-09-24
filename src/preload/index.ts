@@ -38,6 +38,11 @@ const api = {
     ipcRenderer.on(PUSH_CHANNELS.sessionsChanged, listener)
     return () => ipcRenderer.removeListener(PUSH_CHANNELS.sessionsChanged, listener)
   },
+  onSessionCreated: (cb: (s: SessionSummary) => void): (() => void) => {
+    const listener = (_e: IpcRendererEvent, s: SessionSummary) => cb(s)
+    ipcRenderer.on(PUSH_CHANNELS.sessionCreated, listener)
+    return () => ipcRenderer.removeListener(PUSH_CHANNELS.sessionCreated, listener)
+  },
   app: {
     pickDirectory: (): Promise<string | null> => ipcRenderer.invoke(INVOKE_CHANNELS.app.pickDirectory),
     platform: process.platform,
@@ -45,7 +50,8 @@ const api = {
     setSettings: (patch: Partial<AppSettings>): Promise<AppSettings> =>
       ipcRenderer.invoke(INVOKE_CHANNELS.app.setSettings, patch),
     getClaudeStatus: (): Promise<{ found: boolean; candidates: string[] }> =>
-      ipcRenderer.invoke(INVOKE_CHANNELS.app.getClaudeStatus)
+      ipcRenderer.invoke(INVOKE_CHANNELS.app.getClaudeStatus),
+    sessionsReady: (): Promise<boolean> => ipcRenderer.invoke(INVOKE_CHANNELS.app.sessionsReady)
   },
   registry: {
     scan: (): Promise<RegistrySnapshot> => ipcRenderer.invoke(INVOKE_CHANNELS.registry.scan)

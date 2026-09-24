@@ -193,15 +193,11 @@ app.whenReady().then(async () => {
     claudeStatus: { found: claudePath !== null, candidates: claudeCandidates(env, process.platform) }
   })
 
-  // 首启自动开一个 homedir 的纯 shell terminal（不自动启动 claude）。
-  // 不广播 session:created —— 渲染端 hydrate() 会通过 sessions.list() 拉到这个会话并激活第一个 tab，
-  // 避免与 hydrate 抢跑造成重复渲染。
-  {
-    const initialCwd = homedir()
-    const initial = sessions.create(initialCwd, 80, 24, shell, false)
-    activeCwd = initialCwd
-    activeSessionId = initial.id
-  }
+  // 修复 #6：原首启自动开 homedir 纯 shell terminal 的块删除。
+  // 原 main 启动立即 create + spawn pty，但 renderer hydrate() 之前无 listener，Chromium IPC
+  // 不重放 → 首屏 zsh banner/prompt 丢。改成 renderer hydrate() 后调 app:sessionsReady，
+  // 由 ipc.ts 内的 handler 创建并 push session:created，保证 listener 就绪后才 broadcast。
+  // activeCwd/activeSessionId 在 sessionsReady handler 内通过 onSessionCreated 回调更新。
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

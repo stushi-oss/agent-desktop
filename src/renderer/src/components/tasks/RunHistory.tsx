@@ -48,7 +48,7 @@ export function RunHistory({ taskId }: { taskId: string }) {
           )}
         </div>
       ))}
-      {viewing && <TranscriptView run={viewing} taskId={taskId} onClose={() => setViewing(null)} />}
+      {viewing && <TranscriptView run={viewing} onClose={() => setViewing(null)} />}
     </div>
   )
 }
