@@ -63,11 +63,17 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    // 修复 #6：必须先订阅 session:created，再 invoke hydrate()。
+    // 否则 main 在 sessionsReady handler 里 push session:created 时 listener 还没挂上，
+    // bootstrap session 会丢失，导致首屏永远 empty state。
+    const offCreated = window.api.onSessionCreated((session) => {
+      useSessionStore.getState().addSession(session)
+    })
     void hydrate()
     void hydrateTasks()
     const offExit = window.api.onSessionExit((ev) => markExited(ev.id, ev.code))
     const offTasks = window.api.onTasksChanged((p) => refreshFromPush(p.tasks, p.history))
-    return () => { offExit(); offTasks() }
+    return () => { offCreated(); offExit(); offTasks() }
   }, [hydrate, hydrateTasks, markExited, refreshFromPush])
 
   useEffect(() => {

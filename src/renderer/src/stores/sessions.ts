@@ -10,6 +10,7 @@ interface SessionState {
   rename: (id: string, title: string) => void
   markExited: (id: string, code: number | undefined) => void
   close: (id: string) => Promise<void>
+  addSession: (session: SessionSummary) => void // 消费 session:created push（bootstrap handshake）
 }
 
 export const useSessionStore = create<SessionState>()((set, get) => ({
@@ -18,6 +19,10 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
   hydrate: async () => {
     const sessions = await window.api.sessions.list()
     set({ sessions, activeId: sessions.length > 0 ? sessions[0].id : null })
+    // 修复 #6：触发 main 侧 bootstrap handshake
+    // 主端 handler 收到后会调 sessions.create(homedir) + push session:created。
+    // listener 已在 App.tsx useEffect 中预先订阅（先 onSessionCreated 再 invoke）。
+    await window.api.app.sessionsReady()
   },
   activate: (id) => set({ activeId: id }),
   createAndActivate: async (cwd, launchClaude = false) => {
@@ -48,5 +53,14 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
     const rest = get().sessions.filter((x) => x.id !== id)
     const next = rest[idx - 1] ?? rest[0] ?? null
     set({ sessions: rest, activeId: get().activeId === id ? next?.id ?? null : get().activeId })
-  }
+  },
+  // 消费 main 推过来的 session:created 事件（bootstrap handshake）
+  // 已存在则不重复（防止 hydrate 之后再收到一次时双 push），首次则激活
+  addSession: (session) =>
+    set((s) => ({
+      sessions: s.sessions.some((x) => x.id === session.id)
+        ? s.sessions
+        : [...s.sessions, session],
+      activeId: s.activeId ?? session.id
+    }))
 }))
