@@ -3,6 +3,7 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { TaskService, type StartRunFn, type RunContext } from './TaskService'
+import { HISTORY_CAP } from '../store/TaskStore'
 import type { RunRecord, ScheduledTask, TaskInput } from '@shared/types'
 
 let storeDir: string
@@ -312,6 +313,36 @@ describe('finding #2: persist 失败不崩主进程', () => {
       expect(logs.some((l) => l.includes('persist failed'))).toBe(true)
     } finally {
       spy.mockRestore()
+    }
+  })
+})
+
+describe('history cap 与降序不变式（fire 集成）', () => {
+  it('runNow 超过 HISTORY_CAP 次 → history 截到 cap 且 startedAt 严格降序', async () => {
+    // runner 立即 resolve：每次 fire 后 settle 一次即可释放 active，支持连续 fire。
+    // 注意 deferred() 的 resolve 默认填 startedAt:''，会经 finishRun 的 spread
+    // 覆盖 running 记录——这里显式回传与 fire 相同的 startedAt。
+    let i = 0
+    const { svc } = makeService(() => {
+      const d = deferred()
+      d.resolve({
+        status: 'success',
+        startedAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString()
+      })
+      return { runId: `run-${i + 1}`, promise: d.promise, kill: () => undefined }
+    })
+    const task = svc.create(input())
+    const total = HISTORY_CAP + 30
+    // 传入单调递增的 now：startedAt 取自 fire(now).toISOString()
+    for (i = 0; i < total; i++) {
+      svc.runNow(task.id, new Date(Date.UTC(2026, 0, 1, 0, 0, i)))
+      await settle()
+    }
+    expect(svc.history).toHaveLength(HISTORY_CAP)
+    // 头部是真正最新的一条，最早的 30 条被截掉
+    expect(svc.history[0].startedAt).toBe(new Date(Date.UTC(2026, 0, 1, 0, 0, total - 1)).toISOString())
+    for (let k = 1; k < svc.history.length; k++) {
+      expect(svc.history[k - 1].startedAt > svc.history[k].startedAt).toBe(true)
     }
   })
 })

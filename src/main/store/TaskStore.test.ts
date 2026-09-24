@@ -89,6 +89,25 @@ describe('TaskStore', () => {
     expect(trimmed[0].id).toBe('r0')
     expect(trimmed.at(-1)!.id).toBe(`r${HISTORY_CAP - 1}`)
   })
+  it('loadStore：乱序超 cap 的磁盘 history 也保留真正最新 cap 条（load 语义）', () => {
+    // r0 最新（HH:00），r229 最旧；磁盘上偶邻交换模拟乱序写入
+    const total = HISTORY_CAP + 30
+    const recs: RunRecord[] = Array.from({ length: total }, (_, i) =>
+      run(`r${i}`, new Date(Date.UTC(2026, 0, 1, 0, total - i)).toISOString())
+    )
+    for (let i = 0; i + 1 < recs.length; i += 2) {
+      ;[recs[i], recs[i + 1]] = [recs[i + 1], recs[i]]
+    }
+    writeAtomic(join(dir, 'history.json'), recs)
+    const { history } = loadStore(dir)
+    // 排序前移：slice 的是排好序的数组，留下的恰好是时间上最新的 200 条
+    expect(history).toHaveLength(HISTORY_CAP)
+    expect(history[0].id).toBe('r0')
+    expect(history.at(-1)!.id).toBe(`r${HISTORY_CAP - 1}`)
+    for (let i = 1; i < history.length; i++) {
+      expect(history[i - 1].startedAt > history[i].startedAt).toBe(true)
+    }
+  })
 })
 
 describe('trimHistory / sortHistoryDesc (#13)', () => {

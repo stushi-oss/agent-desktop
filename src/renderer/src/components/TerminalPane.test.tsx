@@ -61,11 +61,13 @@ vi.mock('@xterm/xterm', () => ({
 }))
 
 // fit 后的尺寸可控，测试里改这里即可模拟窗口尺寸变化
-const mockFitDims = { cols: 80, rows: 24 }
+// fitCalls：syncSize → fit() 调用计数，用于断言 rAF 合帧 guard（同帧多次 schedule 只跑一次 syncSize）
+const mockFitDims = { cols: 80, rows: 24, fitCalls: 0 }
 vi.mock('@xterm/addon-fit', () => ({
   FitAddon: class {
     term: { cols: number; rows: number } | null = null
     fit() {
+      mockFitDims.fitCalls++
       if (this.term) {
         this.term.cols = mockFitDims.cols
         this.term.rows = mockFitDims.rows
@@ -132,6 +134,7 @@ describe('syncSize resize 去重 (#15)', () => {
     roInstances.length = 0
     mockFitDims.cols = 80
     mockFitDims.rows = 24
+    mockFitDims.fitCalls = 0
     mockApi.sessions.resize.mockClear()
   })
 
@@ -180,5 +183,25 @@ describe('syncSize resize 去重 (#15)', () => {
 
     expect(mockApi.sessions.resize.mock.calls.length).toBe(baseline + 1)
     expect(mockApi.sessions.resize).toHaveBeenLastCalledWith('s1', 100, 30)
+  })
+
+  it('同一帧内连续两次 RO 触发 → fit 只跑一次（rAF 合帧 guard）', async () => {
+    renderWithVisibleHost()
+    await flushRaf() // 挂载期初始 fit 落定
+    // 证明 rAF→syncSize→fit 管线真实跑过（防环境退化成 0 计数的假绿）
+    const baseline = mockFitDims.fitCalls
+    expect(baseline).toBeGreaterThan(0)
+
+    // 同一 tick 内同步连续两次 RO 触发 → 两次 scheduleSync；
+    // 合帧 guard（if (rafId !== null) return）应让第二次变成 no-op
+    const ro = roInstances[0]
+    expect(ro).toBeDefined()
+    ro.callback([], ro as unknown as ResizeObserver)
+    ro.callback([], ro as unknown as ResizeObserver)
+    await flushRaf() // 只 flush 一帧
+
+    // 同帧两次 schedule 只跑一次 syncSize：fit 恰好 +1。
+    // 删掉 scheduleSync 里的 rAF guard 此断言必红（fit 会 +2）。
+    expect(mockFitDims.fitCalls).toBe(baseline + 1)
   })
 })

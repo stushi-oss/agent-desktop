@@ -60,4 +60,30 @@ describe('sessionDataBus', () => {
     expect(w1).not.toHaveBeenCalled()
     expect(w2).toHaveBeenCalledWith('x')
   })
+
+  it('writer 抛错后订阅存活：B 的事件正常路由，A 之后的事件仍可路由', () => {
+    // writeA 仅首次抛错：之后恢复，用于验证后续事件仍真实送达
+    let threwOnce = false
+    const writeA = vi.fn(() => {
+      if (!threwOnce) {
+        threwOnce = true
+        throw new Error('term write exploded')
+      }
+    })
+    const writeB = vi.fn()
+    registerTerminal('a', writeA)
+    registerTerminal('b', writeB)
+
+    // A 抛错沿 dispatch 冒泡（异常穿透到 IPC listener 一侧），但不破坏分发器状态
+    expect(() => listener!({ id: 'a', data: 'boom' })).toThrow('term write exploded')
+
+    // 订阅存活：writer 表未被清，B 的事件照常路由
+    listener!({ id: 'b', data: 'hello-b' })
+    expect(writeB).toHaveBeenCalledWith('hello-b')
+
+    // A 的注册仍在：后续 A 的事件仍会送达（不影响 app 继续运行）
+    listener!({ id: 'a', data: 'after' })
+    expect(writeA).toHaveBeenCalledTimes(2)
+    expect(writeA).toHaveBeenLastCalledWith('after')
+  })
 })

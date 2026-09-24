@@ -22,7 +22,9 @@ export function loadStore(storeDir: string): StoreData {
   }
   return {
     tasks: loadArray<ScheduledTask>('tasks.json'),
-    history: trimHistory(loadArray<RunRecord>('history.json'))
+    // 磁盘数据不保证有序（旧版本写入/外部改动）：先排降序再 trim，
+    // 否则乱序超 cap 时 slice 会按位置截掉真正最新的记录
+    history: trimHistory(sortHistoryDesc(loadArray<RunRecord>('history.json')))
   }
 }
 
@@ -34,7 +36,13 @@ export function saveHistory(storeDir: string, history: RunRecord[]): void {
   writeAtomic(join(storeDir, 'history.json'), trimHistory(history))
 }
 
-/** 运行时 trim：调用方保证降序不变式（fire prepend / finishRun 原位替换） */
+/**
+ * 运行时 trim：调用方保证降序不变式（fire prepend / finishRun 原位替换）。
+ *
+ * 失败模式：该不变式以单调时钟为前提——若 startedAt 出现时钟回拨/非单调
+ * 写入，这里只按位置截断，不保证留下的恰好是时间上最新的 cap 条
+ * （load 路径用 sortHistoryDesc 兜底；运行时不排序是 #13 的性能取舍）。
+ */
 export function trimHistory(history: RunRecord[], cap = HISTORY_CAP): RunRecord[] {
   return history.slice(0, cap)
 }

@@ -99,6 +99,23 @@ describe('extractResultText', () => {
     ].join('\n'))
     expect(extractResultText(events)).toBe('A')
   })
+  it('result,result → 最后一个 result 胜出（硬编码期望）', () => {
+    // 硬编码期望值而非与 extractResultText 自身对照（同义反复测不出回归）
+    const events = parseEvents([
+      '{"type":"result","subtype":"success","result":"FIRST","is_error":false}',
+      '{"type":"result","subtype":"success","result":"SECOND","is_error":false}'
+    ].join('\n'))
+    expect(extractResultText(events)).toBe('SECOND')
+  })
+  it('text,result,text → trailing text 胜出（硬编码期望）', () => {
+    // result 之后又来一段 assistant 文本：最后一段连续 text 优先于更早的 result
+    const events = parseEvents([
+      '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"EARLIER"}]}}',
+      '{"type":"result","subtype":"success","result":"FROM_RESULT","is_error":false}',
+      '{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"TRAILING"}]}}'
+    ].join('\n'))
+    expect(extractResultText(events)).toBe('TRAILING')
+  })
 })
 
 describe('toTranscriptItems', () => {
@@ -147,6 +164,21 @@ describe('createResultExtractor 流式等价 (#14)', () => {
 
   it('空输入 finish 返回 undefined', () => {
     expect(createResultExtractor().finish()).toBeUndefined()
+  })
+
+  it('finish 幂等：连续两次调用结果一致（含 curRun 未冲刷场景）', () => {
+    // 场景 1：末尾 text run 尚未冲刷，首个 finish 完成提升，二次调用不得改变结果
+    const ex1 = createResultExtractor()
+    ex1.feed({ kind: 'text', text: 'a' })
+    ex1.feed({ kind: 'text', text: 'b' })
+    expect(ex1.finish()).toBe('a\nb')
+    expect(ex1.finish()).toBe('a\nb')
+
+    // 场景 2：result 回退路径同样幂等
+    const ex2 = createResultExtractor()
+    ex2.feed({ kind: 'result', text: 'only-result' })
+    expect(ex2.finish()).toBe('only-result')
+    expect(ex2.finish()).toBe('only-result')
   })
 
   it('feed 期间随时 finish 与批量语义一致（中途快照）', () => {

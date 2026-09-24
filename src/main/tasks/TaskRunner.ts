@@ -94,7 +94,8 @@ export function startRun(task: ScheduledTask, ctx: RunContext, opts: RunOpts = {
       while ((idx = buffer.indexOf('\n')) >= 0) {
         const line = buffer.slice(0, idx)
         buffer = buffer.slice(idx + 1)
-        // parseEvents 处理单行 raw 时返回 0 或 1 个 event；逐事件 feed 进 reducer
+        // 单行 raw 通常返回 0/1 个 event，但一条 assistant 行含多个 content
+        // block（text/tool_use 混合）时返回 N 个——逐事件 feed 进 reducer
         for (const e of parseEvents(line)) extractor.feed(e)
       }
     })
