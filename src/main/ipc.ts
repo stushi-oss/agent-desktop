@@ -3,9 +3,9 @@ import { homedir } from 'node:os'
 import type { SessionManager } from './session/SessionManager'
 import type { TaskService } from './tasks/TaskService'
 import type { ShellChoice } from './shellSelect'
-import type { AppSettings, RegistrySnapshot, SessionSummary, TaskInput } from '@shared/types'
+import type { AppSettings, RegistrySnapshot, SessionSummary } from '@shared/types'
 import { INVOKE_CHANNELS, PUSH_CHANNELS } from '@shared/channels'
-import { AppSettingsPatchSchema } from '@shared/schemas'
+import { AppSettingsPatchSchema, TaskInputSchema, TaskPatchSchema } from '@shared/schemas'
 import { CwdSchema, TranscriptRequestSchema, assertRealDir, pathWithinParents } from '@shared/security'
 import { toTranscriptItems } from './tasks/streamJson'
 
@@ -128,9 +128,10 @@ export function registerIpc(deps: IpcDeps): void {
   // ---------- 定时任务 ----------
   ipcMain.handle(INVOKE_CHANNELS.tasks.list, () => tasks.tasks)
   ipcMain.handle(INVOKE_CHANNELS.tasks.history, (_e, taskId?: string) => tasks.historyOf(taskId))
-  ipcMain.handle(INVOKE_CHANNELS.tasks.create, (_e, input: TaskInput) => tasks.create(input))
-  ipcMain.handle(INVOKE_CHANNELS.tasks.update, (_e, id: string, patch: Parameters<TaskService['update']>[1]) =>
-    tasks.update(id, patch)
+  // #17：信任边界统一 — create/update 入参经 zod 运行时校验，不再透传 renderer 数据
+  ipcMain.handle(INVOKE_CHANNELS.tasks.create, (_e, raw: unknown) => tasks.create(TaskInputSchema.parse(raw)))
+  ipcMain.handle(INVOKE_CHANNELS.tasks.update, (_e, rawId: unknown, rawPatch: unknown) =>
+    tasks.update(String(rawId), TaskPatchSchema.parse(rawPatch))
   )
   ipcMain.handle(INVOKE_CHANNELS.tasks.remove, (_e, id: string) => tasks.remove(id))
   ipcMain.handle(INVOKE_CHANNELS.tasks.setEnabled, (_e, id: string, enabled: boolean) => tasks.setEnabled(id, enabled))
