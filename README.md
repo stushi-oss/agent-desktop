@@ -1,73 +1,75 @@
+English | [简体中文](./README.zh-CN.md)
+
 # AgentDesk
 
-> Claude Code 的桌面伴侣 —— 多会话终端 · 定时任务 · Extensions 视图
+> A desktop companion for Claude Code — multi-session terminals · scheduled tasks · Extensions view
 
-Claude Code CLI 的 Electron 桌面封装：在真实终端里与 Claude Code 交互，把重复性工作交给定时任务自动执行，运行结果与完整 transcript 留档可查。
+An Electron desktop wrapper for the Claude Code CLI: work with Claude Code in real terminals, hand repetitive work to scheduled tasks, and keep every run's result and full transcript on record.
 
-## 功能
+## Features
 
-### 终端会话
+### Terminal Sessions
 
-- 基于 node-pty + xterm.js 的真实终端，完整保留 Claude Code 的交互式 UI
-- 多会话管理：侧边栏新建 / 重命名 / 关闭；窗口 resize 自适应（rAF 合帧，高吞吐输出不卡顿）
-- 工作目录经原生目录选择器选定，通过路径校验后才创建会话
+- Real terminals powered by node-pty + xterm.js, fully preserving Claude Code's interactive UI
+- Multi-session management: create / rename / close from the sidebar; resize-aware rendering (rAF-coalesced, stays smooth under high-throughput output)
+- Working directories picked via the native directory dialog and validated before a session is created
 
-### 定时任务
+### Scheduled Tasks
 
-- 三种调度：固定间隔（interval）/ cron 表达式 / 一次性（once）
-- 每任务独立配置：prompt、工作目录、模型、权限模式、超时、完成/失败通知
-- 执行结果通过系统通知提醒；运行历史保留最近 200 条，每次运行的完整 transcript 可回看
-- 首页展示下一个即将执行的任务
+- Three schedule types: fixed interval / cron expression / one-shot
+- Per-task configuration: prompt, working directory, model, permission mode, timeout, success/failure notifications
+- Results delivered through system notifications; run history keeps the most recent 200 entries, each run's full transcript replayable
+- Home view shows the next task about to fire
 
 ### Extensions
 
-- 扫描 `~/.claude` 下已安装的 Skills / Agents / MCP servers
-- 一键插入终端复用；扫描不跟进符号链接，防止恶意插件投毒
+- Scans installed Skills / Agents / MCP servers under `~/.claude`
+- Insert into the terminal with one click; the scanner never follows symlinks, blocking poisoned plugin content
 
-### 其他
+### More
 
-- 主题切换；界面语言：简体中文 / English / 跟随系统
-- 系统托盘、原生菜单、系统通知
-- API 环境变量透传（如 `ANTHROPIC_BASE_URL`、`AWS_REGION`），兼容中转与 Bedrock/Vertex 部署
+- Theme switching; UI language: 简体中文 / English / follow system
+- System tray, native menu, system notifications
+- API environment variable passthrough (e.g. `ANTHROPIC_BASE_URL`, `AWS_REGION`) for relay and Bedrock/Vertex deployments
 
-## 安全设计
+## Security Design
 
-桌面端将 CLI 子进程视为能力边界，逐层加固：
+The desktop treats the CLI subprocess as a capability boundary and hardens every layer:
 
-| 层 | 措施 |
-|----|------|
-| IPC | 通道名集中枚举管理，全部输入经 zod 校验，handler 层测试全覆盖 |
-| 文件系统 | 会话与 transcript 路径限定在允许根内，拒绝路径穿越与目录替换 |
-| 进程环境 | spawn 前过滤密钥类环境变量，避免 shell 配置中的 API key 泄入子进程 |
-| 注册表扫描 | `lstat` 不跟进 symlink，防恶意内容借道注入 |
+| Layer | Measure |
+|--------|---------|
+| IPC | Channel names centrally enumerated; every input validated with zod; full handler-level test coverage |
+| Filesystem | Session and transcript paths confined to allowed roots; path traversal and directory substitution rejected |
+| Process env | Secret-class environment variables filtered before spawn, keeping API keys from shell configs out of child processes |
+| Registry scan | `lstat` without following symlinks, blocking malicious content injection |
 
-## 技术栈
+## Tech Stack
 
-| 层 | 选型 |
-|----|------|
-| 框架 | Electron 44 + electron-vite 5 |
+| Layer | Choice |
+|--------|--------|
+| Framework | Electron 44 + electron-vite 5 |
 | UI | React 19 + TypeScript 5.9 |
-| 状态 | zustand 5 |
-| 终端 | node-pty + @xterm/xterm 6 |
-| 边界校验 | zod 4 |
-| 调度 | cron-parser |
+| State | zustand 5 |
+| Terminal | node-pty + @xterm/xterm 6 |
+| Boundary validation | zod 4 |
+| Scheduling | cron-parser |
 | i18n | i18next + react-i18next |
-| 测试 | vitest + Testing Library |
+| Testing | vitest + Testing Library |
 
-## 快速开始
+## Getting Started
 
-前置要求：
+Prerequisites:
 
-- macOS 或 Windows
-- Node.js ≥ 20.19（推荐 22+）
-- Claude Code CLI 已安装并完成登录：
+- macOS or Windows
+- Node.js ≥ 20.19 (22+ recommended)
+- Claude Code CLI installed and logged in:
 
   ```bash
   npm install -g @anthropic-ai/claude-code
-  claude   # 首次运行完成登录
+  claude   # complete login on first run
   ```
 
-- macOS 若触发 node-pty 源码编译，需 Xcode Command Line Tools（`xcode-select --install`）
+- If macOS triggers a source build of node-pty, Xcode Command Line Tools are required (`xcode-select --install`)
 
 ```bash
 git clone https://github.com/stushi-oss/agent-desktop.git
@@ -76,34 +78,34 @@ npm install
 npm run dev
 ```
 
-## 常用脚本
+## Scripts
 
-| 命令 | 说明 |
-|------|------|
-| `npm run dev` | 启动开发模式（HMR） |
-| `npm run build` | 构建产物到 `out/` |
-| `npm test` | 运行全部测试（vitest） |
-| `npm run typecheck` | node + web 两套 tsconfig 类型检查 |
-| `npm run dist:mac` | 打包 macOS DMG |
-| `npm run dist:win` | 打包 Windows NSIS 安装包 |
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start dev mode (HMR) |
+| `npm run build` | Build artifacts to `out/` |
+| `npm test` | Run the full test suite (vitest) |
+| `npm run typecheck` | Type-check both node and web tsconfigs |
+| `npm run dist:mac` | Package macOS DMG |
+| `npm run dist:win` | Package Windows NSIS installer |
 
-## 项目结构
+## Project Structure
 
 ```
 src/
-├── main/            # Electron 主进程
-│   ├── session/     #   PTY 会话生命周期
-│   ├── tasks/       #   定时任务调度与运行
-│   ├── registry/    #   ~/.claude Skills / Agents / MCP 扫描
-│   ├── store/       #   持久化（原子写 + 历史裁剪）
-│   └── ipc.ts       #   全部 IPC handler（zod 边界）
-├── renderer/        # React 渲染进程
-│   ├── components/  #   终端 / 任务 / Extensions / 设置
-│   ├── stores/      #   zustand（会话、任务、设置、toast）
+├── main/            # Electron main process
+│   ├── session/     #   PTY session lifecycle
+│   ├── tasks/       #   scheduled task runner & service
+│   ├── registry/    #   ~/.claude Skills / Agents / MCP scanning
+│   ├── store/       #   persistence (atomic writes + history trimming)
+│   └── ipc.ts       #   all IPC handlers (zod boundary)
+├── renderer/        # React renderer
+│   ├── components/  #   terminal / tasks / extensions / settings
+│   ├── stores/      #   zustand (sessions, tasks, settings, toasts)
 │   └── i18n/        #   zh-CN / en
-└── shared/          # 双进程共享：channels / schemas / security / streamEvents
+└── shared/          # shared across processes: channels / schemas / security / streamEvents
 ```
 
-## 许可证
+## License
 
 [MIT](./LICENSE)
