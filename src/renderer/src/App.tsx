@@ -13,6 +13,7 @@ import { TerminalPane } from '@/components/TerminalPane'
 import { TaskDrawer } from '@/components/tasks/TaskDrawer'
 import { ExtensionsDrawer } from '@/components/extensions/ExtensionsDrawer'
 import { SettingsModal } from '@/components/SettingsModal'
+import { Toast } from '@/components/ui/Toast'
 
 export default function App() {
   const { t } = useTranslation()
@@ -135,6 +136,7 @@ export default function App() {
       {tasksOpen && <TaskDrawer onClose={() => setTasksOpen(false)} />}
       {extOpen && <ExtensionsDrawer onClose={() => setExtOpen(false)} />}
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
+      <Toast />
     </div>
   )
 }

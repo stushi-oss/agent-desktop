@@ -46,5 +46,10 @@ export const en: TranslationShape = {
   transcript: {
     title: 'Transcript', prompt: 'Prompt', tool: 'Tool Call', result: 'Result',
     empty: 'No output for this run', exitCode: 'Exit code {{code}}'
+  },
+  errors: {
+    sessionCreateFailed: 'Failed to create session',
+    settingsSaveFailed: 'Failed to save settings',
+    taskDeleteFailed: 'Failed to delete task'
   }
 }

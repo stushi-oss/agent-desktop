@@ -58,15 +58,20 @@ export const useTaskStore = create<TaskState>()((set) => ({
     })
   },
   update: async (id, patch) => {
+    // 失败时 console.error 后 rethrow，调用方需自带 catch
+    // （唯一 caller TaskDrawer submit 已接 catch → saveFailed 横幅；
+    //  吞错会让表单假成功关闭、修改静默丢失）
     await withMutationGuard(set, async () => {
       try { await window.api.tasks.update(id, patch) }
-      catch (e) { console.error('update task failed', e) }
+      catch (e) { console.error('update task failed', e); throw e }
     })
   },
   remove: async (id) => {
+    // 失败时 console.error 后 rethrow，调用方需自带 catch
+    // （唯一 caller TaskDrawer onDelete 已接 catch + toast）
     await withMutationGuard(set, async () => {
       try { await window.api.tasks.remove(id) }
-      catch (e) { console.error('remove task failed', e) }
+      catch (e) { console.error('remove task failed', e); throw e }
     })
   }
 }))

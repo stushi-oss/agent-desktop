@@ -44,6 +44,11 @@ export const zhCN = {
   transcript: {
     title: '运行过程', prompt: '任务指令', tool: '工具调用', result: '最终结果',
     empty: '该次运行没有输出', exitCode: '退出码 {{code}}'
+  },
+  errors: {
+    sessionCreateFailed: '创建会话失败',
+    settingsSaveFailed: '保存设置失败',
+    taskDeleteFailed: '删除任务失败'
   }
 } as const
 

@@ -4,6 +4,7 @@ import type { AppSettings } from '@shared/types'
 import { Modal } from './ui/Modal'
 import { Toggle } from './ui/Toggle'
 import { useModeStore } from '@/theme/modeStore'
+import { useToastStore } from '@/stores/toast'
 import i18next from '@/i18n'
 
 export function SettingsModal({ onClose }: { onClose: () => void }) {
@@ -18,14 +19,21 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
   }, [])
 
   const patch = async (p: Partial<AppSettings>): Promise<void> => {
-    const next = await window.api.app.setSettings(p)
-    setSettings(next)
-    if (p.theme) setMode(next.theme)
-    if (p.locale) {
-      const loc = next.locale === 'system'
-        ? (navigator.language.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en')
-        : next.locale
-      void i18next.changeLanguage(loc)
+    try {
+      const next = await window.api.app.setSettings(p)
+      setSettings(next)
+      if (p.theme) setMode(next.theme)
+      if (p.locale) {
+        const loc = next.locale === 'system'
+          ? (navigator.language.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en')
+          : next.locale
+        void i18next.changeLanguage(loc)
+      }
+    } catch (e) {
+      // 保存失败：toast 提示 + 重拉真实状态，消除受控 select 的视觉漂移（#8）
+      console.error('save settings failed', e)
+      useToastStore.getState().show(t('errors.settingsSaveFailed'))
+      void window.api.app.getSettings().then(setSettings).catch((err) => console.error('refetch settings failed', err))
     }
   }
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Modal } from './ui/Modal'
 import { useSessionStore } from '@/stores/sessions'
+import { useToastStore } from '@/stores/toast'
 
 export function NewSessionModal({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation()
@@ -29,7 +30,9 @@ export function NewSessionModal({ onClose }: { onClose: () => void }) {
     setBusy(true)
     const s = await createAndActivate(cwd, true)
     setBusy(false)
+    // 失败不关弹窗：留开让用户可直接重试（#7）
     if (s) onClose()
+    else useToastStore.getState().show(t('errors.sessionCreateFailed'))
   }
 
   return (
