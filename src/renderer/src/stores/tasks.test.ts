@@ -51,4 +51,17 @@ describe('useTaskStore', () => {
     store.refreshFromPush([{ id: 't1', enabled: false } as never], [])
     expect(useTaskStore.getState().tasks[0].enabled).toBe(false)
   })
+
+  it('update 失败时 rethrow（TaskDrawer submit 依赖此契约显示 saveFailed）', async () => {
+    tasksApi.update.mockRejectedValueOnce(new Error('validation failed'))
+    await expect(useTaskStore.getState().update('t1', { name: 'x' })).rejects.toThrow('validation failed')
+    // rethrow 也不能泄漏 mutation guard
+    expect(useTaskStore.getState()._pendingMutations).toBe(0)
+  })
+
+  it('remove 失败时 rethrow（TaskDrawer onDelete 依赖此契约显示 toast）', async () => {
+    tasksApi.remove.mockRejectedValueOnce(new Error('boom'))
+    await expect(useTaskStore.getState().remove('t1')).rejects.toThrow('boom')
+    expect(useTaskStore.getState()._pendingMutations).toBe(0)
+  })
 })

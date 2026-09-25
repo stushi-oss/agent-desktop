@@ -29,10 +29,11 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
           : next.locale
         void i18next.changeLanguage(loc)
       }
-    } catch {
+    } catch (e) {
       // 保存失败：toast 提示 + 重拉真实状态，消除受控 select 的视觉漂移（#8）
+      console.error('save settings failed', e)
       useToastStore.getState().show(t('errors.settingsSaveFailed'))
-      void window.api.app.getSettings().then(setSettings)
+      void window.api.app.getSettings().then(setSettings).catch((err) => console.error('refetch settings failed', err))
     }
   }
 

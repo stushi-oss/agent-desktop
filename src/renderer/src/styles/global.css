@@ -124,7 +124,7 @@ input, textarea, select { font: inherit; }
 
 .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
 
-/* ===== Toast（右上角反馈条；z-index 高于 modal 100 / ctx-menu 200） ===== */
+/* ===== Toast（右下角反馈条；z-index 高于 modal 100 / ctx-menu 200） ===== */
 .toast-stack {
   position: fixed; right: 16px; bottom: 16px;
   display: flex; flex-direction: column; gap: 8px; z-index: 1000;
