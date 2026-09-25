@@ -4,6 +4,7 @@ appId: com.agentdesk.app
 productName: AgentDesk
 directories:
   output: release
+  buildResources: build
 files:
   - out/**
   - package.json
@@ -12,8 +13,10 @@ asarUnpack:
 mac:
   target: dmg
   category: public.app-category.developer-tools
+  icon: build/icon.icns
 win:
   target: nsis
+  icon: build/icon.png
 nsis:
   oneClick: true
   artifactName: AgentDesk-Setup-${version}.${ext}
