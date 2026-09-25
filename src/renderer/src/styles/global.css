@@ -124,6 +124,20 @@ input, textarea, select { font: inherit; }
 
 .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
 
+/* ===== Toast（右上角反馈条；z-index 高于 modal 100 / ctx-menu 200） ===== */
+.toast-stack {
+  position: fixed; right: 16px; bottom: 16px;
+  display: flex; flex-direction: column; gap: 8px; z-index: 1000;
+}
+.toast {
+  padding: 10px 14px; border-radius: 8px; font-size: 13px;
+  cursor: pointer; max-width: 360px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .25);
+}
+.toast-danger { background: var(--danger); color: #ffffff; }
+/* 文字用 accent-contrast（同 .btn-primary 配对）：dark 主题 accent 是浅橙，白字不可读 */
+.toast-info { background: var(--accent); color: var(--accent-contrast); }
+
 /* ===== 应用布局（flex column：titlebar + 可选横幅 + body） ===== */
 .app-shell { display: flex; flex-direction: column; height: 100%; }
 .app-body { display: grid; grid-template-columns: 220px 1fr; flex: 1; min-height: 0; }

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ScheduledTask, TaskInput } from '@shared/types'
 import { useTaskStore } from '@/stores/tasks'
+import { useToastStore } from '@/stores/toast'
 import { formatRelative } from '@/lib/format'
 import { Toggle } from '@/components/ui/Toggle'
 import { TaskForm } from './TaskForm'
@@ -97,7 +98,12 @@ export function TaskDrawer({ onClose }: { onClose: () => void }) {
             taskId={view.taskId}
             onEdit={() => setView({ kind: 'form', task: tasks.find((x) => x.id === view.taskId) })}
             onRunNow={() => { void runNow(view.taskId) }}
-            onDelete={() => { void remove(view.taskId); setView({ kind: 'list' }) }}
+            onDelete={() => {
+              // 删除成功才离开详情页；失败 toast 提示并留在当前页（#10）
+              void remove(view.taskId)
+                .then(() => setView({ kind: 'list' }))
+                .catch(() => useToastStore.getState().show(t('errors.taskDeleteFailed')))
+            }}
           />
         )}
       </div>

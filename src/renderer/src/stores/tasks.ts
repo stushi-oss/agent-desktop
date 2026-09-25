@@ -64,9 +64,11 @@ export const useTaskStore = create<TaskState>()((set) => ({
     })
   },
   remove: async (id) => {
+    // 与其他 mutation 不同：失败时 console.error 后 rethrow，调用方需自带 catch
+    // （唯一 caller TaskDrawer onDelete 已接 catch + toast）
     await withMutationGuard(set, async () => {
       try { await window.api.tasks.remove(id) }
-      catch (e) { console.error('remove task failed', e) }
+      catch (e) { console.error('remove task failed', e); throw e }
     })
   }
 }))
