@@ -3,6 +3,7 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { TaskService, type StartRunFn, type RunContext } from './TaskService'
+import { HISTORY_CAP } from '../store/TaskStore'
 import type { RunRecord, ScheduledTask, TaskInput } from '@shared/types'
 
 let storeDir: string
@@ -264,6 +265,27 @@ describe('TaskService.load（错过标记）', () => {
     rebooted.tick(new Date('2026-01-15T10:00:30'))
     expect(calls).toHaveLength(0)
   })
+  it('load：missed push 到尾部破坏降序后一次性排序恢复（#13）', () => {
+    const { svc: seed } = makeService()
+    const task = seed.create(input(), new Date('2026-01-15T08:00:00'))
+    const { svc } = makeService()
+    svc.tasks = JSON.parse(JSON.stringify(seed.tasks)) as ScheduledTask[]
+    ;(svc.tasks[0] as ScheduledTask).nextRunAt = '2026-01-15T09:00:00'
+    // 磁盘 history 本身降序；missed(09:00) push 到尾部后变乱序 [10:00, 08:30, 09:00]
+    svc.history = [
+      { id: 'h-new', taskId: task.id, startedAt: '2026-01-15T10:00:00', status: 'success' },
+      { id: 'h-old', taskId: task.id, startedAt: '2026-01-15T08:30:00', status: 'success' }
+    ]
+    svc.persist()
+    const rebooted = new TaskService({ storeDir, runsDir, claudePath: '/fake/claude', env: {} })
+    rebooted.load(new Date('2026-01-15T11:00:00'))
+    // missed(09:00) 应落回 10:00 与 08:30 之间，整条 history 严格降序
+    expect(rebooted.history.map((r) => r.startedAt)).toEqual([
+      '2026-01-15T10:00:00',
+      '2026-01-15T09:00:00',
+      '2026-01-15T08:30:00'
+    ])
+  })
 })
 
 // 微任务沉淀：让 fire() 里 handle.promise.then 链跑完
@@ -291,6 +313,36 @@ describe('finding #2: persist 失败不崩主进程', () => {
       expect(logs.some((l) => l.includes('persist failed'))).toBe(true)
     } finally {
       spy.mockRestore()
+    }
+  })
+})
+
+describe('history cap 与降序不变式（fire 集成）', () => {
+  it('runNow 超过 HISTORY_CAP 次 → history 截到 cap 且 startedAt 严格降序', async () => {
+    // runner 立即 resolve：每次 fire 后 settle 一次即可释放 active，支持连续 fire。
+    // 注意 deferred() 的 resolve 默认填 startedAt:''，会经 finishRun 的 spread
+    // 覆盖 running 记录——这里显式回传与 fire 相同的 startedAt。
+    let i = 0
+    const { svc } = makeService(() => {
+      const d = deferred()
+      d.resolve({
+        status: 'success',
+        startedAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString()
+      })
+      return { runId: `run-${i + 1}`, promise: d.promise, kill: () => undefined }
+    })
+    const task = svc.create(input())
+    const total = HISTORY_CAP + 30
+    // 传入单调递增的 now：startedAt 取自 fire(now).toISOString()
+    for (i = 0; i < total; i++) {
+      svc.runNow(task.id, new Date(Date.UTC(2026, 0, 1, 0, 0, i)))
+      await settle()
+    }
+    expect(svc.history).toHaveLength(HISTORY_CAP)
+    // 头部是真正最新的一条，最早的 30 条被截掉
+    expect(svc.history[0].startedAt).toBe(new Date(Date.UTC(2026, 0, 1, 0, 0, total - 1)).toISOString())
+    for (let k = 1; k < svc.history.length; k++) {
+      expect(svc.history[k - 1].startedAt > svc.history[k].startedAt).toBe(true)
     }
   })
 })

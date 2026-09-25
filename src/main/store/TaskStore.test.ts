@@ -3,7 +3,7 @@ import { mkdtempSync, existsSync, readdirSync, writeFileSync, readFileSync } fro
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { writeAtomic, readJson, backupCorrupt } from './fileStore'
-import { loadStore, saveTasks, saveHistory, trimHistory, HISTORY_CAP } from './TaskStore'
+import { loadStore, saveTasks, saveHistory, trimHistory, sortHistoryDesc, HISTORY_CAP } from './TaskStore'
 import type { RunRecord, ScheduledTask } from '@shared/types'
 
 let dir: string
@@ -79,13 +79,64 @@ describe('TaskStore', () => {
     expect(st.history).toEqual([])
     expect(readdirSync(dir).some((f) => f.startsWith('history.json.corrupt-'))).toBe(true)
   })
-  it('trimHistory 保留最新 HISTORY_CAP 条（按 startedAt 倒序）', () => {
+  it('trimHistory slice 保留前 HISTORY_CAP 条（调用方保证降序输入）', () => {
+    // 降序构造（fire prepend 的运行时形状）：r0 最新，r229 最旧
     const many: RunRecord[] = Array.from({ length: HISTORY_CAP + 30 }, (_, i) =>
-      run(`r${i}`, new Date(Date.UTC(2026, 0, 1, 0, i)).toISOString())
+      run(`r${i}`, new Date(Date.UTC(2026, 0, 1, 0, HISTORY_CAP + 29 - i)).toISOString())
     )
     const trimmed = trimHistory(many)
     expect(trimmed).toHaveLength(HISTORY_CAP)
-    expect(trimmed[0].id).toBe(`r${HISTORY_CAP + 29}`)
-    expect(trimmed.at(-1)!.id).toBe('r30')
+    expect(trimmed[0].id).toBe('r0')
+    expect(trimmed.at(-1)!.id).toBe(`r${HISTORY_CAP - 1}`)
+  })
+  it('loadStore：乱序超 cap 的磁盘 history 也保留真正最新 cap 条（load 语义）', () => {
+    // r0 最新（HH:00），r229 最旧；磁盘上偶邻交换模拟乱序写入
+    const total = HISTORY_CAP + 30
+    const recs: RunRecord[] = Array.from({ length: total }, (_, i) =>
+      run(`r${i}`, new Date(Date.UTC(2026, 0, 1, 0, total - i)).toISOString())
+    )
+    for (let i = 0; i + 1 < recs.length; i += 2) {
+      ;[recs[i], recs[i + 1]] = [recs[i + 1], recs[i]]
+    }
+    writeAtomic(join(dir, 'history.json'), recs)
+    const { history } = loadStore(dir)
+    // 排序前移：slice 的是排好序的数组，留下的恰好是时间上最新的 200 条
+    expect(history).toHaveLength(HISTORY_CAP)
+    expect(history[0].id).toBe('r0')
+    expect(history.at(-1)!.id).toBe(`r${HISTORY_CAP - 1}`)
+    for (let i = 1; i < history.length; i++) {
+      expect(history[i - 1].startedAt > history[i].startedAt).toBe(true)
+    }
+  })
+})
+
+describe('trimHistory / sortHistoryDesc (#13)', () => {
+  const rec = (id: string, at: string) => ({ id, taskId: 't', startedAt: at, status: 'success' as const })
+
+  it('trimHistory 尊重 cap（slice 语义）', () => {
+    const hist = [1, 2, 3, 4, 5].map((i) => rec(`r${i}`, `2026-01-0${i}T10:00:00`))
+    const out = trimHistory(hist, 3)
+    expect(out.map((r) => r.id)).toEqual(['r1', 'r2', 'r3'])
+  })
+
+  it('trimHistory 不排序（slice-only，乱序输入原样保留）', () => {
+    const hist = [
+      rec('new', '2026-01-05T10:00:00'),
+      rec('old', '2026-01-01T10:00:00'),
+      rec('mid', '2026-01-03T10:00:00')
+    ]
+    const out = trimHistory(hist, 3)
+    expect(out.map((r) => r.id)).toEqual(['new', 'old', 'mid'])  // 原样，证明无 sort
+  })
+
+  it('sortHistoryDesc 降序排序', () => {
+    const hist = [rec('a', '2026-01-02T10:00:00'), rec('b', '2026-01-03T10:00:00'), rec('c', '2026-01-01T10:00:00')]
+    expect(sortHistoryDesc(hist).map((r) => r.id)).toEqual(['b', 'a', 'c'])
+  })
+
+  it('sortHistoryDesc 不修改原数组', () => {
+    const hist = [rec('a', '2026-01-02T10:00:00'), rec('b', '2026-01-03T10:00:00')]
+    sortHistoryDesc(hist)
+    expect(hist.map((r) => r.id)).toEqual(['a', 'b'])
   })
 })

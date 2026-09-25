@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import type { RunRecord, ScheduledTask, TaskInput } from '@shared/types'
 import type { NormalizedEvent } from '@shared/streamEvents'
 import { isValidCronExpr } from '@shared/scheduleCheck'
-import { loadStore, newId, saveHistory, saveTasks, trimHistory } from '../store/TaskStore'
+import { loadStore, newId, saveHistory, saveTasks, sortHistoryDesc, trimHistory } from '../store/TaskStore'
 import { isDue, nextRunOf } from './schedule'
 import { parseEvents } from './streamJson'
 import { startRun, type RunContext, type RunHandle } from './TaskRunner'
@@ -99,6 +99,8 @@ export class TaskService {
       }
       t.nextRunAt = t.enabled ? this.nextOf(t, now) : undefined
     }
+    // missed 记录 push 到尾部破坏降序：一次性排序恢复不变式（修复 #13）
+    this.history = sortHistoryDesc(this.history)
     this.history = trimHistory(this.history)
     this.safePersist('load')
     this.emit()

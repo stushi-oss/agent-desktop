@@ -105,32 +105,54 @@ export function parseEvents(raw: string): NormalizedEvent[] {
   return events
 }
 
+export interface ResultExtractor {
+  feed(event: NormalizedEvent): void
+  finish(): string | undefined
+}
+
 /**
- * 提取任务结果文本。
+ * 流式版 result 提取：与 extractResultText 同一语义（最后一段连续
+ * text 优先，回退最后 result），O(1) 滚动状态。供 TaskRunner 逐事件
+ * 消费，替代全程累积 events 数组（修复 #14）。
+ *
+ * 语义（与批量版共享）：
  * - 优先取最后一段连续 text 事件（多块用 '\n' 拼接，对应最后一条 assistant
  *   的所有 text 块）
  * - 回退到最后一个 result 事件的 text
  * - 都没有 → undefined
  */
-export function extractResultText(events: NormalizedEvent[]): string | undefined {
+export function createResultExtractor(): ResultExtractor {
   let lastTextRun: string[] = []
   let curRun: string[] = []
   let resultText: string | undefined
-  for (const e of events) {
-    if (e.kind === 'text') {
-      curRun.push(e.text)
-    } else {
-      if (curRun.length > 0) {
-        lastTextRun = curRun
-        curRun = []
+  return {
+    feed(e) {
+      if (e.kind === 'text') {
+        curRun.push(e.text)
+      } else {
+        if (curRun.length > 0) {
+          lastTextRun = curRun
+          curRun = []
+        }
+        if (e.kind === 'result') {
+          resultText = e.text
+        }
       }
-      if (e.kind === 'result') {
-        resultText = e.text
-      }
+    },
+    finish() {
+      if (curRun.length > 0) lastTextRun = curRun
+      return lastTextRun.length > 0 ? lastTextRun.join('\n') : resultText
     }
   }
-  if (curRun.length > 0) lastTextRun = curRun
-  return lastTextRun.length > 0 ? lastTextRun.join('\n') : resultText
+}
+
+/**
+ * 提取任务结果文本（批量版）：复用流式 reducer，单一事实来源。
+ */
+export function extractResultText(events: NormalizedEvent[]): string | undefined {
+  const ex = createResultExtractor()
+  for (const e of events) ex.feed(e)
+  return ex.finish()
 }
 
 export type { TranscriptItem }
