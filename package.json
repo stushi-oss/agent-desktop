@@ -1,6 +1,6 @@
 {
   "name": "agent-desktop",
-  "version": "0.1.0",
+  "version": "0.1.6",
   "description": "Claude Code desktop wrapper with scheduled tasks",
   "main": "./out/main/index.js",
   "scripts": {
